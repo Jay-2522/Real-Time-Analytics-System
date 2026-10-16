@@ -22,7 +22,7 @@ def parse_kafka_json(kafka_df: DataFrame, schema: StructType) -> DataFrame:
 def normalize_event(df: DataFrame) -> DataFrame:
     return (
         df.withColumn("event_timestamp", F.to_timestamp("timestamp"))
-        .withColumn("risk_score", F.coalesce(F.col("risk_score").cast("double"), F.lit(0.0)))
+        .withColumn("risk_score", F.col("risk_score").cast("double"))
         .withColumn("risk_score_normalized", F.round(F.col("risk_score") / F.lit(100.0), 4))
         .withColumn(
             "risk_level",
@@ -34,7 +34,6 @@ def normalize_event(df: DataFrame) -> DataFrame:
         .withColumn("processed_at", F.current_timestamp())
         .filter(F.col("event_id").isNotNull())
         .filter(F.col("event_timestamp").isNotNull())
-        .filter((F.col("risk_score") >= 0.0) & (F.col("risk_score") <= 100.0))
     )
 
 
@@ -48,6 +47,8 @@ def select_enriched_columns(df: DataFrame) -> DataFrame:
         "risk_level": None,
         "source_ip": None,
         "user_id": None,
+        "login_success": None,
+        "destination_ip": None,
         "country": None,
         "endpoint": None,
         "status_code": None,

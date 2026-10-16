@@ -5,16 +5,19 @@ import pandas as pd
 
 from app.config.settings import MLSettings
 from app.features.feature_definitions import FEATURE_COLUMNS
-from app.models.artifact_store import ModelArtifacts
+from app.models.artifact_store import ModelArtifacts, validate_artifacts
 from app.schemas.prediction import PredictionEvent, Severity
 
 
 class AnomalyPredictor:
     def __init__(self, settings: MLSettings, artifacts: ModelArtifacts) -> None:
+        validate_artifacts(artifacts)
         self._settings = settings
         self._artifacts = artifacts
 
-    def predict(self, features: dict[str, float], source_event_id: str | None, event_type: str, entity_id: str) -> PredictionEvent:
+    def predict(self, features: dict[str, float], source_event_id: str | None, event_type: str, entity_id: str, window_metadata: dict | None = None) -> PredictionEvent:
+        if list(features) != FEATURE_COLUMNS or not all(np.isfinite(v) for v in features.values()):
+            raise ValueError("Invalid ordered model input")
         vector = pd.DataFrame([[features[name] for name in FEATURE_COLUMNS]], columns=FEATURE_COLUMNS, dtype=float)
         scaled = self._artifacts.scaler.transform(vector)
 
@@ -26,9 +29,10 @@ class AnomalyPredictor:
         is_anomaly = prediction == -1 or ml_risk_score >= 70.0
 
         return PredictionEvent(
+            **(window_metadata or {}),
             source_event_id=source_event_id,
-            model_name=self._settings.model_name,
-            model_version=self._settings.model_version,
+            model_name=self._artifacts.metadata["model_name"],
+            model_version=self._artifacts.metadata["model_version"],
             event_type=event_type,
             entity_id=entity_id,
             anomaly_score=round(anomaly_score, 6),

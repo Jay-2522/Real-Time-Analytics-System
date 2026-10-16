@@ -62,3 +62,6 @@ ml-models/artifacts/*.parquet
 ml-models/artifacts/training_metrics.json
 *.tmp
 *.bak
+
+# Generated contract-v2 models (legacy tracked baseline artifacts are retained)
+ml-models/artifacts/contract-v2/

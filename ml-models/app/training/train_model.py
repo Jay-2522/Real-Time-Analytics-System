@@ -10,7 +10,7 @@ from sklearn.preprocessing import StandardScaler
 
 from app.config.settings import MLSettings, get_settings
 from app.data.synthetic_training_data import generate_synthetic_training_data
-from app.features.feature_definitions import FEATURE_COLUMNS
+from app.features.feature_definitions import FEATURE_COLUMNS, FEATURE_CONTRACT_VERSION, PREPROCESSING
 from app.models.artifact_store import save_artifacts
 from app.utils.logging import configure_logging
 
@@ -47,6 +47,12 @@ def train_and_save(settings: MLSettings) -> dict:
         "model_version": settings.model_version,
         "algorithm": "IsolationForest",
         "feature_columns": FEATURE_COLUMNS,
+        "feature_contract_version": FEATURE_CONTRACT_VERSION,
+        "preprocessing": PREPROCESSING,
+        "entity_type": "source_ip",
+        "window_seconds": 60,
+        "random_state": 42,
+        "training_data": "synthetic coherent source-IP windows; no independent accuracy evaluation",
         "created_at": datetime.now(UTC).isoformat(),
         "training_sample_size": int(settings.training_sample_size),
         "contamination": float(settings.contamination),

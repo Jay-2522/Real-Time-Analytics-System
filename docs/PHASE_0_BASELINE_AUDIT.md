@@ -2,6 +2,16 @@
 
 Audit date: 17 October 2026 (Asia/Kolkata). This report distinguishes observed runtime behavior, confirmed source defects, unverified operational risks, and optional improvements. PASS means only the particular check described passed. File existence, a listening port, an HTTP 200, and a metrics endpoint do not establish pipeline correctness.
 
+## Verified follow-up — 17 October 2026
+
+The [Phase 1 Spark–ML contract report](PHASE_1_SPARK_ML_CONTRACT.md) records the
+versioned feature-contract correction and directly related test isolation/dependency fixes
+on `dev`: 37 Python tests and 5 actual Spark tests passed, with no failures or skips.
+Controlled live events produced four semantically verified windows/predictions, persisted
+successfully and were visible through the API. This supersedes the specific contract and
+test-failure status below; all original audit evidence is preserved, and unrelated production
+readiness/security/reliability findings remain open.
+
 ## A. Repository overview
 
 Root inspected: `/Users/jay2522/Downloads/Real-Time-Analytics-System-main`.

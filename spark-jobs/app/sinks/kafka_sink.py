@@ -17,7 +17,7 @@ def write_json_to_kafka(
 ) -> StreamingQuery:
     serializable_df = df.select(
         F.coalesce(F.col(key_column).cast("string"), F.expr("uuid()")).alias("key") if key_column else F.expr("uuid()").alias("key"),
-        F.to_json(F.struct(*[F.col(column) for column in df.columns])).alias("value"),
+        F.to_json(F.struct(*[F.col(column) for column in df.columns]), {"ignoreNullFields": "false", "timeZone": "UTC"}).alias("value"),
     )
 
     return (

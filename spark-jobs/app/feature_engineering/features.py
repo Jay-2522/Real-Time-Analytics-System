@@ -1,92 +1,80 @@
-from pyspark.sql import DataFrame
-from pyspark.sql import functions as F
-
+"""Contract 2.0: atomic, source-IP-scoped, event-time window vectors."""
+from pyspark.sql import DataFrame, functions as F
 from app.config.settings import SparkStreamingSettings
+from app.transformations.normalization import select_enriched_columns
+
+CONTRACT_VERSION = "2.0"
 
 
-def _feature_frame(df: DataFrame, feature_name: str, entity_column: str, value_column: str, count_column: str = "event_count") -> DataFrame:
-    return df.select(
-        F.lit(feature_name).alias("feature_name"),
-        F.col(entity_column).cast("string").alias("entity_id"),
-        F.col("window.start").alias("window_start"),
-        F.col("window.end").alias("window_end"),
-        F.round(F.col(value_column).cast("double"), 6).alias("feature_value"),
-        F.col(count_column).cast("long").alias("event_count"),
-        F.current_timestamp().alias("calculated_at"),
-    )
+def build_feature_pipeline(login_events, api_events, network_events, anomaly_events,
+                           settings: SparkStreamingSettings) -> DataFrame:
+    events = select_enriched_columns(login_events)
+    for frame in (api_events, network_events, anomaly_events):
+        events = events.unionByName(select_enriched_columns(frame))
+    return build_window_features(events, settings)
 
 
-def build_login_features(login_events: DataFrame, settings: SparkStreamingSettings) -> DataFrame:
-    base = (
-        login_events.withWatermark("event_timestamp", settings.watermark_delay)
-        .groupBy(F.window("event_timestamp", "1 minute", "30 seconds"), F.coalesce(F.col("user_id"), F.lit("unknown")).alias("user_id"))
+def build_window_features(events: DataFrame, settings: SparkStreamingSettings) -> DataFrame:
+    login = F.col("event_type") == "login"
+    api = F.col("event_type") == "api"
+    network = F.col("event_type") == "network"
+    anomaly = F.col("event_type") == "anomaly"
+
+    def count(condition):
+        return F.sum(F.when(condition, 1).otherwise(0))
+
+    def present(name):
+        return F.col(name).isNotNull() & (F.length(F.trim(F.col(name))) > 0)
+
+    valid = (F.col("risk_score").between(0, 100)
+             & (login | api | network | anomaly)
+             & (~login | (F.col("login_success").isNotNull() & present("country")))
+             & (~api | (F.col("status_code").between(100, 599) & (F.col("response_time_ms") >= 0)))
+             & (~network | ((F.col("bytes_sent") >= 0) & (F.col("bytes_received") >= 0)
+                            & present("destination_ip"))))
+    base = (events.filter(present("source_ip"))
+        .withWatermark("event_timestamp", settings.watermark_delay)
+        .groupBy(F.window("event_timestamp", "1 minute", "30 seconds"), "source_ip")
         .agg(
             F.count("*").alias("event_count"),
-            F.sum(F.when(F.col("login_success") == F.lit(False), 1).otherwise(0)).alias("failed_login_count"),
-            F.approx_count_distinct("country").alias("geo_login_variance"),
-        )
-        .withColumn("user_failed_login_rate", F.col("failed_login_count") / F.col("event_count"))
-    )
+            count(login).alias("login_event_count"), count(api).alias("api_event_count"),
+            count(network).alias("network_event_count"), count(anomaly).alias("anomaly_event_count"),
+            count(~F.coalesce(valid, F.lit(False))).alias("invalid_event_count"),
+            count(login & (F.col("login_success") == F.lit(False))).alias("failed_auth_count"),
+            count(api & F.col("status_code").between(400, 599)).alias("api_error_count"),
+            count(api & F.col("status_code").between(500, 599)).alias("api_5xx_count"),
+            F.avg(F.when(api, F.col("response_time_ms"))).alias("avg_api_response_time"),
+            F.avg(F.when(network, F.col("bytes_sent").cast("double") + F.col("bytes_received").cast("double"))).alias("avg_network_bytes"),
+            count(network & (F.col("risk_score") >= 70)).alias("high_risk_network_event_count"),
+            F.avg("risk_score").alias("risk_score_moving_average"),
+            count(F.col("risk_score") >= 70).alias("high_risk_event_count"),
+            F.size(F.collect_set(F.when(login, F.col("country")))).alias("distinct_login_country_count"),
+            F.size(F.collect_set(F.when(network, F.col("destination_ip")))).alias("unique_destination_ip_count"),
+            F.sort_array(F.collect_list("event_id")).alias("source_event_ids"),
+            F.min("event_timestamp").alias("first_event_at"),
+            F.max("event_timestamp").alias("last_event_at"),
+        ))
 
-    failed_rate = _feature_frame(base, "user_failed_login_rate", "user_id", "user_failed_login_rate")
-    geo_variance = _feature_frame(base, "geo_login_variance", "user_id", "geo_login_variance")
-    return failed_rate.unionByName(geo_variance)
+    def ratio(numerator, denominator):
+        return F.when(F.col(denominator) > 0, F.col(numerator) / F.col(denominator))
 
-
-def build_api_features(api_events: DataFrame, settings: SparkStreamingSettings) -> DataFrame:
-    base = (
-        api_events.withWatermark("event_timestamp", settings.watermark_delay)
-        .groupBy(F.window("event_timestamp", "1 minute", "30 seconds"), F.coalesce(F.col("endpoint"), F.lit("unknown")).alias("endpoint"))
-        .agg(
-            F.count("*").alias("event_count"),
-            F.avg("response_time_ms").alias("avg_api_response_time"),
-            F.sum(F.when(F.col("status_code") >= 400, 1).otherwise(0)).alias("error_count"),
-        )
-        .withColumn("requests_per_minute", F.col("event_count").cast("double"))
-        .withColumn("endpoint_error_rate", F.col("error_count") / F.col("event_count"))
-    )
-
-    response_time = _feature_frame(base, "avg_api_response_time", "endpoint", "avg_api_response_time")
-    rpm = _feature_frame(base, "requests_per_minute", "endpoint", "requests_per_minute")
-    error_rate = _feature_frame(base, "endpoint_error_rate", "endpoint", "endpoint_error_rate")
-    return response_time.unionByName(rpm).unionByName(error_rate)
-
-
-def build_network_features(network_events: DataFrame, settings: SparkStreamingSettings) -> DataFrame:
-    base = (
-        network_events.withWatermark("event_timestamp", settings.watermark_delay)
-        .groupBy(F.window("event_timestamp", "1 minute", "30 seconds"), F.coalesce(F.col("source_ip"), F.lit("unknown")).alias("source_ip"))
-        .agg(
-            F.count("*").alias("event_count"),
-            F.avg(F.coalesce(F.col("bytes_sent"), F.lit(0)) + F.coalesce(F.col("bytes_received"), F.lit(0))).alias("avg_network_bytes"),
-            F.sum(F.when(F.col("risk_score") >= 70, 1).otherwise(0)).alias("suspicious_ip_frequency"),
-        )
-    )
-
-    avg_bytes = _feature_frame(base, "avg_network_bytes", "source_ip", "avg_network_bytes")
-    suspicious = _feature_frame(base, "suspicious_ip_frequency", "source_ip", "suspicious_ip_frequency")
-    return avg_bytes.unionByName(suspicious)
-
-
-def build_anomaly_features(anomaly_events: DataFrame, settings: SparkStreamingSettings) -> DataFrame:
-    base = (
-        anomaly_events.withWatermark("event_timestamp", settings.watermark_delay)
-        .groupBy(F.window("event_timestamp", "1 minute", "30 seconds"), F.coalesce(F.col("anomaly_type"), F.lit("unknown")).alias("anomaly_type"))
-        .agg(F.count("*").alias("event_count"), F.avg("risk_score").alias("anomaly_rate"))
-    )
-    return _feature_frame(base, "anomaly_rate", "anomaly_type", "anomaly_rate")
-
-
-def build_feature_pipeline(
-    login_events: DataFrame,
-    api_events: DataFrame,
-    network_events: DataFrame,
-    anomaly_events: DataFrame,
-    settings: SparkStreamingSettings,
-) -> DataFrame:
-    return (
-        build_login_features(login_events, settings)
-        .unionByName(build_api_features(api_events, settings))
-        .unionByName(build_network_features(network_events, settings))
-        .unionByName(build_anomaly_features(anomaly_events, settings))
+    base = (base.withColumn("failed_login_rate", ratio("failed_auth_count", "login_event_count"))
+        .withColumn("endpoint_error_rate", ratio("api_error_count", "api_event_count"))
+        .withColumn("api_5xx_rate", ratio("api_5xx_count", "api_event_count"))
+        .withColumn("anomaly_rate", ratio("anomaly_event_count", "event_count"))
+        .withColumn("requests_per_minute", F.col("api_event_count").cast("double")))
+    feature_names = [
+        "event_count", "login_event_count", "api_event_count", "network_event_count", "anomaly_event_count",
+        "failed_login_rate", "failed_auth_count", "requests_per_minute", "avg_api_response_time",
+        "endpoint_error_rate", "api_5xx_rate", "avg_network_bytes", "high_risk_network_event_count",
+        "anomaly_rate", "risk_score_moving_average", "high_risk_event_count",
+        "distinct_login_country_count", "unique_destination_ip_count",
+    ]
+    return base.select(
+        F.lit(CONTRACT_VERSION).alias("feature_contract_version"),
+        F.lit("feature_window").alias("event_type"), F.lit("source_ip").alias("entity_type"),
+        F.col("source_ip").alias("entity_id"), "source_event_ids", "invalid_event_count",
+        F.col("window.start").alias("window_start"), F.col("window.end").alias("window_end"),
+        "first_event_at", "last_event_at", F.current_timestamp().alias("calculated_at"),
+        F.struct(*[F.col(name).cast("double").alias(name) for name in feature_names]).alias("features"),
     )

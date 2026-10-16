@@ -99,6 +99,9 @@ class MLInferenceConsumer:
                 source_event_id=self._feature_mapper.source_event_id(parsed_payload),
                 event_type=self._feature_mapper.event_type(parsed_payload, topic),
                 entity_id=self._feature_mapper.entity_id(parsed_payload),
+                window_metadata={key: parsed_payload[key] for key in (
+                    "feature_contract_version", "entity_type", "source_event_ids", "window_start",
+                    "window_end", "first_event_at", "last_event_at", "calculated_at")},
             )
             self._publish_prediction(prediction)
             ML_PREDICTIONS_TOTAL.inc()
@@ -114,7 +117,7 @@ class MLInferenceConsumer:
                 prediction.severity,
                 topic,
             )
-        except (UnicodeDecodeError, json.JSONDecodeError, ValidationError, ValueError, TypeError) as exc:
+        except (UnicodeDecodeError, json.JSONDecodeError, ValidationError, ValueError, TypeError, KeyError) as exc:
             ML_PREDICTION_ERRORS_TOTAL.inc()
             logger.warning("unprocessable_ml_message topic=%s reason=%s", topic, exc)
             self._publish_deadletter(topic, str(exc), self._decode_payload(payload))

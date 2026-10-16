@@ -49,6 +49,7 @@ def main() -> None:
         .unionByName(select_enriched_columns(api_events), allowMissingColumns=True)
         .unionByName(select_enriched_columns(network_events), allowMissingColumns=True)
         .unionByName(select_enriched_columns(anomaly_events), allowMissingColumns=True)
+        .filter("risk_score >= 0 AND risk_score <= 100")
     )
 
     window_metrics = build_window_metrics(enriched_events, settings)
@@ -84,7 +85,7 @@ def main() -> None:
             settings=settings,
             topic=settings.feature_engineering_topic,
             query_name="analytics_feature_engineering",
-            checkpoint_name="analytics_feature_engineering",
+            checkpoint_name="analytics_feature_engineering_v2",
             key_column="entity_id",
         ),
     ]

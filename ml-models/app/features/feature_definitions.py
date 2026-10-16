@@ -1,36 +1,19 @@
+"""Versioned source-IP/60-second contract; order is also the scaler input order."""
+FEATURE_CONTRACT_VERSION = "2.0"
 FEATURE_COLUMNS = [
-    "failed_login_rate",
-    "requests_per_minute",
-    "avg_api_response_time",
-    "endpoint_error_rate",
-    "suspicious_ip_frequency",
-    "avg_network_bytes",
-    "anomaly_rate",
-    "risk_score_moving_average",
-    "geo_login_variance",
-    "high_risk_event_count",
-    "failed_auth_count",
-    "api_5xx_rate",
-    "network_bytes_spike_score",
-    "unique_ip_count",
-    "session_activity_score",
+    "event_count", "login_event_count", "api_event_count", "network_event_count", "anomaly_event_count",
+    "failed_login_rate", "failed_auth_count", "requests_per_minute", "avg_api_response_time",
+    "endpoint_error_rate", "api_5xx_rate", "avg_network_bytes", "high_risk_network_event_count",
+    "anomaly_rate", "risk_score_moving_average", "high_risk_event_count",
+    "distinct_login_country_count", "unique_destination_ip_count",
 ]
-
-FEATURE_DEFAULTS = {
-    "failed_login_rate": 0.0,
-    "requests_per_minute": 0.0,
-    "avg_api_response_time": 0.0,
-    "endpoint_error_rate": 0.0,
-    "suspicious_ip_frequency": 0.0,
-    "avg_network_bytes": 0.0,
-    "anomaly_rate": 0.0,
-    "risk_score_moving_average": 0.0,
-    "geo_login_variance": 0.0,
-    "high_risk_event_count": 0.0,
-    "failed_auth_count": 0.0,
-    "api_5xx_rate": 0.0,
-    "network_bytes_spike_score": 0.0,
-    "unique_ip_count": 1.0,
-    "session_activity_score": 0.0,
+NULLABLE_BY_COUNT = {
+    "failed_login_rate": "login_event_count",
+    "avg_api_response_time": "api_event_count",
+    "endpoint_error_rate": "api_event_count",
+    "api_5xx_rate": "api_event_count",
+    "avg_network_bytes": "network_event_count",
 }
-
+PREPROCESSING = "conditional-null-to-zero-with-event-counts-v1;StandardScaler"
+COUNT_COLUMNS = {name for name in FEATURE_COLUMNS if name.endswith("count")}
+RATE_COLUMNS = {"failed_login_rate", "endpoint_error_rate", "api_5xx_rate", "anomaly_rate"}

@@ -1,93 +1,90 @@
 from __future__ import annotations
 
+import math
+from datetime import datetime
+from ipaddress import ip_address
 from typing import Any
 
-from app.features.feature_definitions import FEATURE_COLUMNS, FEATURE_DEFAULTS
+from app.features.feature_definitions import (
+    FEATURE_COLUMNS, FEATURE_CONTRACT_VERSION, NULLABLE_BY_COUNT, COUNT_COLUMNS, RATE_COLUMNS,
+)
+
+
+def validate_features(raw: dict) -> dict[str, float]:
+    if not isinstance(raw, dict) or set(raw) != set(FEATURE_COLUMNS):
+        raise ValueError("Feature names must exactly match contract 2.0")
+    result = {}
+    for name in FEATURE_COLUMNS:
+        value = raw[name]
+        if value is None and name in NULLABLE_BY_COUNT:
+            if raw[NULLABLE_BY_COUNT[name]] != 0:
+                raise ValueError(f"Missing observed feature: {name}")
+            # Explicit structural missingness. Counts are model inputs, not guessed measurements.
+            result[name] = 0.0
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+            raise ValueError(f"Invalid numerical feature: {name}")
+        if name in COUNT_COLUMNS and value != int(value):
+            raise ValueError(f"Nonintegral count: {name}")
+        if (name in RATE_COLUMNS and value > 1) or (name == "risk_score_moving_average" and value > 100):
+            raise ValueError(f"Out-of-range feature: {name}")
+        if name in NULLABLE_BY_COUNT and raw[NULLABLE_BY_COUNT[name]] == 0:
+            raise ValueError(f"Unobserved feature must be null: {name}")
+        result[name] = float(value)
+    n, login, api, network, anomaly = (result[k] for k in FEATURE_COLUMNS[:5])
+    if n <= 0 or n != login + api + network + anomaly:
+        raise ValueError("Event counts are inconsistent")
+    for child, parent in [("failed_auth_count", login), ("distinct_login_country_count", login),
+                          ("unique_destination_ip_count", network), ("high_risk_network_event_count", network),
+                          ("high_risk_event_count", n)]:
+        if result[child] > parent:
+            raise ValueError(f"Count exceeds scope: {child}")
+    if ((login > 0 and result["distinct_login_country_count"] < 1)
+            or (network > 0 and result["unique_destination_ip_count"] < 1)):
+        raise ValueError("Missing distinct observations")
+    for name, expected in [("failed_login_rate", result["failed_auth_count"] / login if login else 0),
+                           ("anomaly_rate", anomaly / n), ("requests_per_minute", api)]:
+        if not math.isclose(result[name], expected, abs_tol=1e-9):
+            raise ValueError(f"Inconsistent derived feature: {name}")
+    if result["api_5xx_rate"] > result["endpoint_error_rate"]:
+        raise ValueError("5xx rate exceeds overall error rate")
+    return result
 
 
 class FeatureMapper:
     def to_feature_vector(self, payload: dict[str, Any]) -> dict[str, float]:
-        features = dict(FEATURE_DEFAULTS)
+        if not isinstance(payload, dict) or payload.get("feature_contract_version") != FEATURE_CONTRACT_VERSION:
+            raise ValueError("Unsupported or missing feature contract version")
+        if payload.get("entity_type") != "source_ip" or payload.get("event_type") != "feature_window":
+            raise ValueError("Invalid feature entity/event scope")
+        if not isinstance(payload.get("entity_id"), str):
+            raise ValueError("Entity ID must be an IP string")
+        ip_address(payload["entity_id"])
+        if type(payload.get("invalid_event_count")) is not int or payload["invalid_event_count"] != 0:
+            raise ValueError("Window contains invalid source measurements")
+        times = {}
+        for name in ("window_start", "window_end", "first_event_at", "last_event_at", "calculated_at"):
+            if not isinstance(payload.get(name), str):
+                raise ValueError(f"Missing or invalid timestamp: {name}")
+            value = datetime.fromisoformat(payload[name].replace("Z", "+00:00"))
+            if value.utcoffset() is None or value.utcoffset().total_seconds() != 0:
+                raise ValueError("Contract timestamps must be UTC")
+            times[name] = value
+        start, end = times["window_start"], times["window_end"]
+        if ((end - start).total_seconds() != 60 or start.timestamp() % 30 != 0
+                or not start <= times["first_event_at"] <= times["last_event_at"] < end):
+            raise ValueError("Invalid window boundaries or event timestamps")
+        result = validate_features(payload["features"])
+        ids = payload.get("source_event_ids")
+        if not isinstance(ids, list) or len(ids) != result["event_count"] or any(not isinstance(v, str) or not v for v in ids):
+            raise ValueError("Incomplete source event provenance")
+        return result
 
-        if payload.get("feature_name") and "feature_value" in payload:
-            self._map_feature_engineering_event(payload, features)
-        else:
-            self._map_analytics_event(payload, features)
+    def entity_id(self, payload):
+        return payload["entity_id"]
 
-        return {name: self._safe_float(features.get(name, FEATURE_DEFAULTS[name])) for name in FEATURE_COLUMNS}
+    def source_event_id(self, payload):
+        return None  # A window has multiple sources; never pick an arbitrary event.
 
-    def entity_id(self, payload: dict[str, Any]) -> str:
-        for key in ("entity_id", "user_id", "source_ip", "endpoint", "event_type"):
-            value = payload.get(key)
-            if value:
-                return str(value)
-        return "unknown"
-
-    def source_event_id(self, payload: dict[str, Any]) -> str | None:
-        value = payload.get("event_id") or payload.get("source_event_id")
-        return str(value) if value else None
-
-    def event_type(self, payload: dict[str, Any], source_topic: str) -> str:
-        return str(payload.get("event_type") or payload.get("metric_type") or payload.get("feature_name") or source_topic)
-
-    @staticmethod
-    def _map_feature_engineering_event(payload: dict[str, Any], features: dict[str, float]) -> None:
-        feature_name = str(payload.get("feature_name", ""))
-        if feature_name in features:
-            features[feature_name] = payload.get("feature_value", features[feature_name])
-
-        event_count = payload.get("event_count")
-        if feature_name == "user_failed_login_rate":
-            features["failed_auth_count"] = event_count or 0.0
-        if feature_name == "endpoint_error_rate":
-            features["api_5xx_rate"] = payload.get("feature_value", 0.0)
-        if feature_name == "suspicious_ip_frequency":
-            features["unique_ip_count"] = max(float(event_count or 1.0), 1.0)
-
-    @staticmethod
-    def _map_analytics_event(payload: dict[str, Any], features: dict[str, float]) -> None:
-        event_type = payload.get("event_type")
-        risk_score = payload.get("risk_score") or payload.get("risk_score_moving_average") or 0.0
-        features["risk_score_moving_average"] = risk_score
-        features["high_risk_event_count"] = payload.get("high_risk_event_count", 1.0 if float(risk_score or 0.0) >= 70 else 0.0)
-
-        if event_type == "login":
-            login_success = payload.get("login_success", True)
-            features["failed_login_rate"] = 0.0 if login_success else 1.0
-            features["failed_auth_count"] = 0.0 if login_success else 1.0
-            features["geo_login_variance"] = 1.0 if payload.get("country") else 0.0
-            features["session_activity_score"] = risk_score
-        elif event_type == "api":
-            status_code = int(payload.get("status_code") or 200)
-            features["avg_api_response_time"] = payload.get("response_time_ms", 0.0)
-            features["requests_per_minute"] = payload.get("event_count", 1.0)
-            features["endpoint_error_rate"] = 1.0 if status_code >= 400 else 0.0
-            features["api_5xx_rate"] = 1.0 if status_code >= 500 else 0.0
-        elif event_type == "network":
-            bytes_sent = payload.get("bytes_sent") or 0.0
-            bytes_received = payload.get("bytes_received") or 0.0
-            avg_bytes = float(bytes_sent) + float(bytes_received)
-            features["avg_network_bytes"] = avg_bytes
-            features["network_bytes_spike_score"] = avg_bytes / 100000.0
-            features["unique_ip_count"] = 1.0
-        elif event_type == "anomaly":
-            features["anomaly_rate"] = 1.0
-            features["suspicious_ip_frequency"] = 1.0
-
-        for key in ("rolling_event_count", "event_count"):
-            if key in payload:
-                features["requests_per_minute"] = max(features["requests_per_minute"], payload[key] or 0.0)
-
-        for key in ("avg_api_response_time", "endpoint_error_rate", "avg_network_bytes", "anomaly_rate", "geo_login_variance"):
-            if key in payload and payload[key] is not None:
-                features[key] = payload[key]
-
-    @staticmethod
-    def _safe_float(value: Any) -> float:
-        try:
-            if value is None:
-                return 0.0
-            return float(value)
-        except (TypeError, ValueError):
-            return 0.0
-
+    def event_type(self, payload, source_topic):
+        return payload["event_type"]

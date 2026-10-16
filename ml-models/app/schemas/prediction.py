@@ -25,6 +25,14 @@ class PredictionEvent(BaseModel):
     severity: Severity
     explanation: str
     features_used: dict[str, float]
+    feature_contract_version: str | None = None
+    entity_type: str | None = None
+    source_event_ids: list[str] = Field(default_factory=list)
+    window_start: datetime | None = None
+    window_end: datetime | None = None
+    first_event_at: datetime | None = None
+    last_event_at: datetime | None = None
+    calculated_at: datetime | None = None
 
     model_config = ConfigDict(
         json_encoders={datetime: lambda value: value.isoformat(), UUID: str},
