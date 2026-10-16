@@ -32,7 +32,9 @@ Full observability demo:
 - Observability: `http://localhost:5173/observability`
 - API docs: `http://localhost:8000/docs`
 - Prometheus: `http://localhost:9090`
-- Grafana: `http://localhost:3000` (`admin / admin`)
+- Grafana: `http://localhost:<GRAFANA_PUBLISHED_PORT>` (user `admin`; read the
+  generated password privately from `.env`). Run `python3 scripts/setup_local.py`
+  before startup if local settings do not exist.
 
 ## Recruiter Demo Script
 

@@ -1,0 +1,14 @@
+.git
+.env
+**/.env
+**/.env.local
+**/.venv
+**/venv
+**/node_modules
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/*.db
+.codex-logs
+.docker
+screenshots

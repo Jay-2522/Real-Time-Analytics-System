@@ -278,7 +278,18 @@ storage-sink/.env.example
 threat-intelligence-engine/.env.example
 ```
 
-Docker Compose uses `.env.example` by default for local development.
+Generate private local settings before starting Docker Compose:
+
+```bash
+python3 scripts/setup_local.py
+```
+
+Docker Compose reads `.env`; keep it out of Git. The setup command preserves an
+existing `.env`, generates separate PostgreSQL and Grafana passwords, and chooses
+alternate host ports when 5432 or 3000 is occupied. Published services bind to
+127.0.0.1. These are development settings; database and Grafana credentials only
+initialize new volumes. Never delete existing volumes to change credentials.
+See [the baseline audit](docs/PHASE_0_BASELINE_AUDIT.md) for verified results and blockers.
 
 ### 3. Start Laptop-Friendly Mode
 

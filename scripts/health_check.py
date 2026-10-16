@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import sys
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -18,12 +20,24 @@ class CheckResult:
     reason: str
 
 
+def local_value(name: str, default: str) -> str:
+    if name in os.environ:
+        return os.environ[name]
+    path = Path(__file__).resolve().parents[1] / ".env"
+    if path.exists():
+        for line in path.read_text().splitlines():
+            key, separator, value = line.partition("=")
+            if separator and key == name:
+                return value.strip()
+    return default
+
+
 HTTP_CHECKS = [
     ("Backend API", "http://localhost:8000/api/v1/health"),
     ("Frontend", "http://localhost:5173"),
     ("Elasticsearch", "http://localhost:9200/_cluster/health"),
     ("Prometheus", "http://localhost:9090/-/ready"),
-    ("Grafana", "http://localhost:3000/api/health"),
+    ("Grafana", f"http://localhost:{local_value('GRAFANA_PUBLISHED_PORT', '3000')}/api/health"),
     ("ML Inference", "http://localhost:9101/metrics"),
     ("Storage Sink", "http://localhost:9102/metrics"),
     ("Alert Engine", "http://localhost:9103/metrics"),
@@ -32,7 +46,7 @@ HTTP_CHECKS = [
 
 TCP_CHECKS = [
     ("Kafka", "localhost", 9092),
-    ("PostgreSQL", "localhost", 5432),
+    ("PostgreSQL", "localhost", int(local_value("POSTGRES_PUBLISHED_PORT", "5432"))),
     ("Redis", "localhost", 6379),
 ]
 
