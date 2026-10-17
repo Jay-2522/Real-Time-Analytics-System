@@ -1,4 +1,4 @@
-import { httpClient } from "../api/httpClient";
+import { httpClient, rethrowAuthError } from "../api/httpClient";
 import type { AttackTimeline, DetectionRuleSummary, EntityProfile, IOCMatch, MitreTechnique, ThreatGraph, ThreatOverview } from "../types/threatIntel";
 
 export const threatIntelService = {
@@ -56,7 +56,8 @@ async function getOrFallback<T>(url: string, fallback: T): Promise<T> {
   try {
     const response = await httpClient.get<T>(url);
     return response.data;
-  } catch {
+  } catch (error) {
+    rethrowAuthError(error);
     return fallback;
   }
 }

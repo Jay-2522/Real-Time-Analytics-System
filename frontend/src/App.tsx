@@ -1,3 +1,4 @@
+import { SessionGate } from "./auth/SessionGate";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { DashboardLayout } from "./layouts/DashboardLayout";
@@ -19,7 +20,7 @@ import { ThreatIntelligencePage } from "./pages/ThreatIntelligencePage";
 
 export default function App() {
   return (
-    <Routes>
+    <SessionGate><Routes>
       <Route element={<DashboardLayout />}>
         <Route index element={<OverviewPage />} />
         <Route path="live" element={<LiveStreamPage />} />
@@ -38,6 +39,6 @@ export default function App() {
         <Route path="attack-timeline" element={<AttackTimelinePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
-    </Routes>
+    </Routes></SessionGate>
   );
 }

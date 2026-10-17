@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.core.settings import settings
@@ -9,6 +9,8 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def initialize_database() -> None:
+    with engine.connect() as connection:
+        connection.execute(text("SELECT id FROM auth_control WHERE id=1"))
     Base.metadata.create_all(bind=engine)
 
 

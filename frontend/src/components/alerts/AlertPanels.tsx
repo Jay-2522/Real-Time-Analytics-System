@@ -1,3 +1,4 @@
+import { StatusEditor } from "./StatusEditor";
 import { Radio, Siren } from "lucide-react";
 
 import type { AlertRecord, AlertStats, IncidentRecord } from "../../types/alerts";
@@ -66,7 +67,7 @@ export function AlertsTable({ alerts }: { alerts: AlertRecord[] }) {
                 <td className="px-5 py-3 font-medium text-white">{alert.title}</td>
                 <td className="px-5 py-3">{alert.entity_id ?? "unknown"}</td>
                 <td className="px-5 py-3">{(alert.ml_risk_score ?? alert.anomaly_score ?? 0).toFixed(2)}</td>
-                <td className="px-5 py-3 text-slate-400">{alert.status}</td>
+                <td className="px-5 py-3 text-slate-400"><StatusEditor kind="alerts" id={alert.alert_id} status={alert.status} /></td>
                 <td className="max-w-xl px-5 py-3 text-slate-400">{alert.explanation}</td>
               </tr>
             )) : (
@@ -95,7 +96,7 @@ export function IncidentCards({ incidents }: { incidents: IncidentRecord[] }) {
           <div className="mt-5 grid gap-3 md:grid-cols-3">
             <MiniStat label="Events" value={incident.event_count} />
             <MiniStat label="Escalation" value={incident.escalation_level} />
-            <MiniStat label="Status" value={incident.status} />
+            <StatusEditor kind="incidents" id={incident.incident_id} status={incident.status} />
           </div>
           <div className="mt-5 border-t border-white/10 pt-4">
             <p className="text-xs uppercase text-slate-500">Affected entities</p>

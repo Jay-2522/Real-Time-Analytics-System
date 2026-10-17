@@ -1,4 +1,4 @@
-import { httpClient } from "../api/httpClient";
+import { httpClient, rethrowAuthError } from "../api/httpClient";
 import type { ErrorSummary, MetricsSummary, MonitoringOverview, PipelineMetrics, ServiceHealth } from "../types/monitoring";
 
 export const monitoringService = {
@@ -59,7 +59,8 @@ async function getOrFallback<T>(url: string, fallback: T): Promise<T> {
   try {
     const response = await httpClient.get<T>(url);
     return response.data;
-  } catch {
+  } catch (error) {
+    rethrowAuthError(error);
     return fallback;
   }
 }

@@ -1,3 +1,5 @@
+import axios from "axios";
+import { httpClient } from "../api/httpClient";
 import { useEffect, useRef, useState } from "react";
 
 import { config } from "../config/environment";
@@ -27,8 +29,15 @@ export function useDashboardWebSocket() {
       socket.onerror = () => {
         socket.close();
       };
-      socket.onclose = () => {
+      socket.onclose = async (event) => {
         if (!closed) {
+          setMessage(null);
+          if (event.code === 4401) { window.dispatchEvent(new Event("session-expired")); return; }
+          try { await httpClient.get("/auth/me"); }
+          catch (error) {
+            if (axios.isAxiosError(error) && [401, 403].includes(error.response?.status ?? 0)) return;
+          }
+          if (closed) return;
           setStatus("fallback");
           retryRef.current = window.setTimeout(connect, 3000);
         }

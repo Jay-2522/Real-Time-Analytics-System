@@ -1,8 +1,11 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 
 from app.api.v1.router import api_router
+from app.auth.middleware import AccessControlMiddleware
+from app.auth.routes import router as auth_router
 from app.core.logging import configure_logging
 from app.core.metrics import PrometheusMetricsMiddleware, metrics_response
 from app.core.settings import settings
@@ -22,6 +25,7 @@ def create_application() -> FastAPI:
             "SOC alerting, incident intelligence, threat intelligence, monitoring, and dashboard APIs."
         ),
         docs_url="/docs",
+        swagger_ui_oauth2_redirect_url=None,
         redoc_url="/redoc",
         openapi_url=f"{settings.api_v1_prefix}/openapi.json",
         contact={"name": "Streaming Analytics Platform Engineering"},
@@ -36,12 +40,13 @@ def create_application() -> FastAPI:
         ],
     )
 
+    application.add_middleware(AccessControlMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH"],
+        allow_headers=["Content-Type", "X-CSRF-Token", "X-Requested-With"],
     )
     application.add_middleware(SecurityHeadersMiddleware)
     application.add_middleware(LocalRateLimitMiddleware)
@@ -50,6 +55,13 @@ def create_application() -> FastAPI:
     application.add_api_route("/metrics", metrics_response, methods=["GET"], include_in_schema=False)
 
     application.include_router(api_router, prefix=settings.api_v1_prefix)
+    application.include_router(auth_router, prefix=settings.api_v1_prefix)
+
+    @application.exception_handler(RequestValidationError)
+    async def validation_error_handler(request: Request, exc: RequestValidationError):
+        # Pydantic's default response echoes input, including password fields.
+        return JSONResponse(status_code=422, content={"detail": "Invalid request"},
+                            headers={"Cache-Control": "no-store"})
 
     @application.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

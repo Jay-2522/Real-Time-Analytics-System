@@ -1,4 +1,4 @@
-import { httpClient } from "../api/httpClient";
+import { httpClient, rethrowAuthError } from "../api/httpClient";
 import type { AnalyticsRecord, ChartPoint, DashboardOverview, EntityRiskPoint, SystemHealth } from "../types/dashboard";
 
 const fallbackOverview: DashboardOverview = {
@@ -78,7 +78,8 @@ async function getOrFallback<T>(url: string, fallback: T): Promise<T> {
   try {
     const response = await httpClient.get<T>(url);
     return response.data;
-  } catch {
+  } catch (error) {
+    rethrowAuthError(error);
     return fallback;
   }
 }

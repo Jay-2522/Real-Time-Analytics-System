@@ -2,10 +2,11 @@ import asyncio
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal, get_db
+from app.auth.service import audit, authorize_write
 from app.core.metrics import ACTIVE_WEBSOCKET_CONNECTIONS, ALERT_WEBSOCKET_MESSAGES_TOTAL
 from app.schemas.alerts import AlertResponse, AlertStatsResponse, IncidentResponse, StatusUpdateRequest
 from app.services.alert_service import AlertQueryService
@@ -59,18 +60,24 @@ def search_alerts(q: str = Query(min_length=1), limit: int = Query(default=25, g
 
 
 @router.patch("/alerts/{alert_id}/status", response_model=AlertResponse)
-def update_alert_status(alert_id: str, request: StatusUpdateRequest, db: Annotated[Session, Depends(get_db)]):
+def update_alert_status(alert_id: str, request: StatusUpdateRequest, http_request: Request, db: Annotated[Session, Depends(get_db)]):
+    authorize_write(db, http_request.state.principal, "analyst")
     result = service.update_alert_status(db, alert_id, request.status)
     if result is None:
         raise HTTPException(status_code=404, detail="Alert not found")
+    audit(db, "alert_status_changed", alert_id, actor=http_request.state.principal["id"])
+    db.commit()
     return result
 
 
 @router.patch("/incidents/{incident_id}/status", response_model=IncidentResponse)
-def update_incident_status(incident_id: str, request: StatusUpdateRequest, db: Annotated[Session, Depends(get_db)]):
+def update_incident_status(incident_id: str, request: StatusUpdateRequest, http_request: Request, db: Annotated[Session, Depends(get_db)]):
+    authorize_write(db, http_request.state.principal, "analyst")
     result = service.update_incident_status(db, incident_id, request.status, request.resolution_notes)
     if result is None:
         raise HTTPException(status_code=404, detail="Incident not found")
+    audit(db, "incident_status_changed", incident_id, actor=http_request.state.principal["id"])
+    db.commit()
     return result
 
 

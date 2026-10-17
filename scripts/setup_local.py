@@ -20,6 +20,17 @@ def available_port(preferred: int, alternate: int) -> int:
 
 
 def main() -> None:
+    secret_dir = ROOT / ".secrets"
+    secret_dir.mkdir(mode=0o700, exist_ok=True)
+    secret_dir.chmod(0o700)
+    token_file = secret_dir / "backend_metrics_token"
+    if not token_file.exists():
+        fd = os.open(token_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as handle:
+            handle.write(secrets.token_urlsafe(32) + "\n")
+        # Parent directory is owner-only; the mounted file must be readable by Prometheus.
+        token_file.chmod(0o444)
+        print("Created private backend metrics credential.")
     target = ROOT / ".env"
     if target.exists():
         print("Existing .env preserved. Check its credentials and published ports before starting.")

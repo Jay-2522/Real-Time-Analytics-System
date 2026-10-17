@@ -1,3 +1,4 @@
+import { useSession } from "../auth/session";
 import { NavLink, Outlet } from "react-router-dom";
 import { Activity, BarChart3, Bell, BrainCircuit, Crosshair, FolderKanban, Gauge, GitBranch, LayoutDashboard, Network, Radio, Search, Server, ShieldCheck, Siren, Users } from "lucide-react";
 
@@ -20,6 +21,7 @@ const navigationItems = [
 ];
 
 export function DashboardLayout() {
+  const { user, logout } = useSession();
   return (
     <div className="min-h-screen bg-surface-950 text-slate-100">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-white/10 bg-surface-900/95 px-5 py-6 lg:block">
@@ -60,6 +62,8 @@ export function DashboardLayout() {
               <h1 className="mt-1 text-xl font-semibold text-white">Real-Time AI Analytics Interface</h1>
             </div>
             <div className="flex items-center gap-3">
+              <span>{user.username} · {user.role}</span>
+              <button type="button" onClick={() => void logout()}>Sign out</button>
               <div className="hidden min-w-72 items-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-slate-400 md:flex">
                 <Search size={16} />
                 <span className="text-sm">Search telemetry, entities, predictions</span>

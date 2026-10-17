@@ -65,3 +65,5 @@ ml-models/artifacts/training_metrics.json
 
 # Generated contract-v2 models (legacy tracked baseline artifacts are retained)
 ml-models/artifacts/contract-v2/
+
+.secrets/

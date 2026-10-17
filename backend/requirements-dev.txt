@@ -1,3 +1,5 @@
 -r requirements.txt
 # FastAPI TestClient needs httpx; it is not a backend runtime dependency.
 httpx==0.28.1
+# Real-browser authentication regression tests (opt-in).
+playwright==1.55.0

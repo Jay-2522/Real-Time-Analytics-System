@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +22,10 @@ class Settings(BaseSettings):
         validation_alias="BACKEND_CORS_ORIGINS",
         description="Comma-separated CORS origins loaded from BACKEND_CORS_ORIGINS.",
     )
+    auth_local_http: bool = False
+    session_seconds: int = Field(default=28800, ge=300, le=86400)
+    session_idle_seconds: int = Field(default=1800, ge=60, le=28800)
+    metrics_token_file: str = ""
     log_level: str = "INFO"
     database_url: str = "sqlite+pysqlite:///./analytics.db"
     elasticsearch_host: str = "http://localhost:9200"
@@ -46,6 +50,25 @@ class Settings(BaseSettings):
             raise ValueError("BACKEND_CORS_ORIGINS must define at least one origin")
 
         return value
+
+    @model_validator(mode="after")
+    def secure_origins(self):
+        from urllib.parse import urlsplit
+        for origin in self.cors_origins:
+            url = urlsplit(origin)
+            if url.scheme not in ("http", "https") or not url.netloc or url.path or url.query or url.fragment or url.username:
+                raise ValueError("Explicit origin URLs without paths or wildcards are required")
+            if "*" in origin:
+                raise ValueError("Wildcard origins are forbidden")
+            if self.auth_local_http and (self.environment != "development" or url.hostname not in ("localhost", "127.0.0.1", "::1")):
+                raise ValueError("HTTP cookie exception is restricted to development loopback origins")
+            if self.environment != "development" and url.scheme != "https":
+                raise ValueError("Production origins require HTTPS")
+        return self
+
+    @property
+    def session_cookie(self):
+        return "soc_session_local" if self.auth_local_http else "__Host-soc_session"
 
     @property
     def cors_origins(self) -> List[str]:

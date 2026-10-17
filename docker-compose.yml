@@ -153,7 +153,9 @@ services:
       - ./.env
     environment:
       ENVIRONMENT: development
-      BACKEND_CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+      BACKEND_CORS_ORIGINS: http://localhost:5173
+      AUTH_LOCAL_HTTP: "true"
+      METRICS_TOKEN_FILE: /run/secrets/backend_metrics_token
       DATABASE_URL: postgresql+psycopg://streaming_user:${POSTGRES_PASSWORD:?Run python3 scripts/setup_local.py first}@streaming-analytics-postgres:5432/streaming_analytics
       ELASTICSEARCH_HOST: http://streaming-analytics-elasticsearch:9200
       REDIS_URL: redis://streaming-analytics-redis:6379/0
@@ -161,6 +163,8 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - ${DEV_BIND_ROOT:-.}/backend/app:/app/app
+    secrets:
+      - backend_metrics_token
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       postgres:
@@ -434,6 +438,8 @@ services:
   prometheus:
     container_name: streaming-analytics-prometheus
     image: prom/prometheus:v2.55.1
+    secrets:
+      - backend_metrics_token
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=7d
@@ -496,3 +502,7 @@ volumes:
     name: streaming-analytics-prometheus-data
   grafana_data:
     name: streaming-analytics-grafana-data
+
+secrets:
+  backend_metrics_token:
+    file: ./.secrets/backend_metrics_token

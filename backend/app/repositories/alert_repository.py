@@ -35,7 +35,7 @@ class AlertRepository:
 
     def update_alert_status(self, db: Session, alert_id: str, status: str) -> Alert | None:
         db.execute(update(Alert).where(Alert.alert_id == alert_id).values(status=status))
-        db.commit()
+        db.flush()
         return db.scalars(select(Alert).where(Alert.alert_id == alert_id)).first()
 
     def update_incident_status(self, db: Session, incident_id: str, status: str, notes: str | None) -> Incident | None:
@@ -43,6 +43,6 @@ class AlertRepository:
         if notes is not None:
             values["resolution_notes"] = notes
         db.execute(update(Incident).where(Incident.incident_id == incident_id).values(**values))
-        db.commit()
+        db.flush()
         return self.incident(db, incident_id)
 
