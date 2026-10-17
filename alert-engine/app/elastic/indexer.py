@@ -28,12 +28,7 @@ class AlertIndexer:
             logger.warning("alert_elasticsearch_initialization_failed reason=%s", exc)
 
     def index_alert(self, alert: AlertEvent) -> None:
-        if not self._available:
-            return
-        try:
-            self._client.index(index="alerts", id=alert.alert_id, document=alert.model_dump(mode="json"))
-        except Exception as exc:
-            logger.warning("alert_index_failed reason=%s", exc)
+        self._client.index(index="alerts", id=alert.alert_id, document=alert.model_dump(mode="json"))
 
     @staticmethod
     def _mapping() -> dict:

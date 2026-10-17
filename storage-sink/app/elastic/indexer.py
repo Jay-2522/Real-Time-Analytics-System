@@ -28,14 +28,13 @@ class ElasticsearchIndexer:
             self._available = False
             logger.warning("elasticsearch_initialization_failed action=postgres_only reason=%s", exc)
 
-    def index(self, record: StorageRecord) -> None:
-        if not self._available:
-            return
+    def index(self, record: StorageRecord, key: str) -> None:
+        # Always attempt: recovery must not depend on availability at startup.
         try:
-            self._client.index(index=self._index_for_record(record), document=self._document(record))
-        except Exception as exc:
+            self._client.index(index=self._index_for_record(record), id=key, document=self._document(record))
+        except Exception:
             ELASTICSEARCH_INDEX_ERRORS_TOTAL.inc()
-            logger.warning("elasticsearch_index_failed action=continue_postgres reason=%s", exc)
+            raise
 
     @staticmethod
     def _index_for_record(record: StorageRecord) -> str:

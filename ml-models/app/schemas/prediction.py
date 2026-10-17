@@ -16,6 +16,7 @@ class PredictionEvent(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     model_name: str
     model_version: str
+    model_artifact_id: str | None = None
     event_type: str
     entity_id: str
     anomaly_score: float = Field(ge=0.0, le=1.0)

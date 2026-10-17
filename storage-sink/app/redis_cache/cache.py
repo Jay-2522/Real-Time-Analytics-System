@@ -1,4 +1,3 @@
-import json
 import logging
 
 import redis
@@ -12,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class RedisCache:
     def __init__(self, settings: StorageSinkSettings) -> None:
-        self._client = redis.Redis(host=settings.redis_host, port=settings.redis_port, decode_responses=True, socket_connect_timeout=3)
+        self._client = redis.Redis(host=settings.redis_host, port=settings.redis_port, decode_responses=True, socket_connect_timeout=3, socket_timeout=3)
         self._available = False
 
     def initialize(self) -> None:
@@ -24,19 +23,21 @@ class RedisCache:
             self._available = False
             logger.warning("redis_unavailable action=continue_without_cache reason=%s", exc)
 
-    def update(self, record: StorageRecord) -> None:
-        if not self._available:
-            return
+    def update(self, record: StorageRecord, key: str) -> None:
+        from pipeline_runtime.cache import cache_once
+        counters = []
+        if record.event_type:
+            counters.append(f"counters:events:{record.event_type}")
+        if record.severity:
+            counters.append(f"counters:severity:{record.severity}")
+        latest = (f"latest:prediction:{record.entity_id}" if record.record_kind == "prediction"
+                  else f"recent:high-risk:{record.entity_id or key}" if (record.ml_risk_score or record.risk_score or 0) >= 70
+                  else f"latest:event:{record.entity_id or key}")
         try:
-            if record.event_type:
-                self._client.incr(f"counters:events:{record.event_type}")
-            if record.severity:
-                self._client.incr(f"counters:severity:{record.severity}")
-            if record.record_kind == "prediction" and record.entity_id:
-                self._client.set(f"latest:prediction:{record.entity_id}", json.dumps(record.raw_payload, default=str), ex=86400)
-            if (record.ml_risk_score or record.risk_score or 0) >= 70:
-                key = f"recent:high-risk:{record.entity_id or record.event_id or record.prediction_id or 'unknown'}"
-                self._client.set(key, json.dumps(record.raw_payload, default=str), ex=3600)
-        except Exception as exc:
+            cache_once(self._client, "storage", key, latest, record.timestamp_or_created.isoformat(), record.raw_payload, counters)
+            if record.record_kind == "prediction" and (record.ml_risk_score or record.risk_score or 0) >= 70:
+                cache_once(self._client, "storage-high-risk", key, f"recent:high-risk:{record.entity_id or key}",
+                           record.timestamp_or_created.isoformat(), record.raw_payload, [])
+        except Exception:
             REDIS_CACHE_ERRORS_TOTAL.inc()
-            logger.warning("redis_cache_update_failed action=continue reason=%s", exc)
+            raise

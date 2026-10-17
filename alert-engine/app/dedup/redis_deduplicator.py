@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class AlertDeduplicator:
     def __init__(self, settings: AlertEngineSettings) -> None:
         self._settings = settings
-        self._client = redis.Redis(host=settings.redis_host, port=settings.redis_port, decode_responses=True, socket_connect_timeout=3)
+        self._client = redis.Redis(host=settings.redis_host, port=settings.redis_port, decode_responses=True, socket_connect_timeout=3, socket_timeout=3)
         self._available = False
 
     def initialize(self) -> None:
@@ -41,14 +41,8 @@ class AlertDeduplicator:
             return True
 
     def update_live_caches(self, alert: AlertEvent) -> None:
-        if not self._available:
-            return
-        try:
-            self._client.incr(f"counters:alerts:severity:{alert.severity}")
-            self._client.incr(f"counters:alerts:entity:{alert.entity_id}")
-            self._client.set(f"latest:alert:{alert.entity_id}", alert.model_dump_json(), ex=3600)
-            if alert.severity == "critical":
-                self._client.lpush("live:critical-alerts", alert.model_dump_json())
-                self._client.ltrim("live:critical-alerts", 0, 50)
-        except Exception as exc:
-            logger.warning("redis_alert_cache_failed reason=%s", exc)
+        from pipeline_runtime.cache import cache_once
+        cache_once(self._client, "alert", alert.alert_id, f"latest:alert:{alert.entity_id}",
+                   alert.timestamp.isoformat(), alert.model_dump(mode="json"),
+                   [f"counters:alerts:severity:{alert.severity}", f"counters:alerts:entity:{alert.entity_id}"],
+                   list_key="live:critical-alerts" if alert.severity == "critical" else "")

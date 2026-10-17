@@ -1,3 +1,8 @@
+from pipeline_runtime.durable import OutboxWorker, quarantine_record, IdentityConflict
+from pipeline_runtime.identity import quarantine
+from app.schemas.alerts import AlertEvent
+from pipeline_runtime.kafka import CONSUMER_OPTIONS, DeliveryLoop
+from pipeline_runtime.identity import coordinate
 import json
 import logging
 import signal
@@ -22,24 +27,22 @@ class AlertEngineConsumer:
         self._service = service
         self._consumer: Consumer | None = None
         self._running = True
+        self._outbox = OutboxWorker(session_factory, "alert", {
+            "elasticsearch": lambda key, payload: service._indexer.index_alert(AlertEvent.model_validate(payload)),
+            "redis": lambda key, payload: service._deduplicator.update_live_caches(AlertEvent.model_validate(payload)),
+        })
 
     def run(self) -> None:
         self._register_shutdown_handlers()
         self._consumer = retry_with_backoff(self._create_consumer, logger, "Kafka alert-engine consumer connection")
         logger.info("subscribing_alert_engine topics=%s group=%s", ALERT_INPUT_TOPICS, self._settings.consumer_group)
-        self._consumer.subscribe(list(ALERT_INPUT_TOPICS))
-
-        while self._running:
-            message = self._consumer.poll(timeout=1.0)
-            if message is None:
-                continue
-            if message.error():
-                logger.error("alert_engine_kafka_error error=%s", message.error())
-                continue
-            self._handle_message(message.topic(), message.value())
-
-        logger.info("closing_alert_engine_consumer")
-        self._consumer.close()
+        self._outbox.start()
+        try:
+            DeliveryLoop(self._consumer, "alert").run(ALERT_INPUT_TOPICS,
+                lambda message: self._handle_message(message.topic(), message.value(), coordinate(message)),
+                lambda: self._running)
+        finally:
+            self._outbox.stop()
 
     def _create_consumer(self) -> Consumer:
         consumer = Consumer(
@@ -48,26 +51,40 @@ class AlertEngineConsumer:
                 "group.id": self._settings.consumer_group,
                 "client.id": "streaming-analytics-alert-engine",
                 "auto.offset.reset": "earliest",
-                "enable.auto.commit": True,
+                **CONSUMER_OPTIONS,
             }
         )
         metadata = consumer.list_topics(timeout=10)
         logger.info("alert_engine_kafka_connected brokers=%s", len(metadata.brokers))
         return consumer
 
-    def _handle_message(self, topic: str, payload: bytes | None) -> None:
+    def _handle_message(self, topic: str, payload: bytes | None, position=None) -> None:
+        from pipeline_runtime.identity import logical_key, digest
         try:
             if payload is None:
-                return
+                raise ValueError("Empty alert input")
             parsed = json.loads(payload.decode("utf-8"))
-            with self._session_factory() as session:
-                count = self._service.process(session, topic, parsed)
-                session.commit()
-            if count:
-                logger.info("alerts_persisted count=%s source_topic=%s", count, topic)
+            logical_key(topic, parsed)
+            digest(parsed)
+            # Classify schema/rule errors before opening a transaction.
+            self._service._rules.evaluate(topic, parsed)
+        except (UnicodeError, ValueError, TypeError, KeyError) as exc:
+            with self._session_factory() as session, session.begin():
+                quarantine_record(session, "alert", quarantine(topic, payload, exc, position))
+            ALERT_ENGINE_ERRORS_TOTAL.inc()
+            logger.warning("alert_input_quarantined position=%s reason=%s", position, exc)
+            return
+        try:
+            with self._session_factory() as session, session.begin():
+                self._service.process(session, topic, parsed)
+        except IdentityConflict as exc:
+            with self._session_factory() as session, session.begin():
+                quarantine_record(session, "alert", quarantine(topic, payload, exc, position))
+            ALERT_ENGINE_ERRORS_TOTAL.inc()
+            logger.error("alert_identity_conflict position=%s reason=%s", position, exc)
         except Exception:
             ALERT_ENGINE_ERRORS_TOTAL.inc()
-            logger.exception("alert_engine_message_failed topic=%s", topic)
+            raise
 
     def _register_shutdown_handlers(self) -> None:
         def shutdown_handler(signum: int, _frame: FrameType | None) -> None:

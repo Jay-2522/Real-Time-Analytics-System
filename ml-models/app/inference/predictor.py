@@ -33,6 +33,7 @@ class AnomalyPredictor:
             source_event_id=source_event_id,
             model_name=self._artifacts.metadata["model_name"],
             model_version=self._artifacts.metadata["model_version"],
+            model_artifact_id=self._artifacts.metadata["artifact_id"],
             event_type=event_type,
             entity_id=entity_id,
             anomaly_score=round(anomaly_score, 6),

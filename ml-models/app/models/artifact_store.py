@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,6 +55,9 @@ def validate_artifacts(artifacts: ModelArtifacts) -> None:
 def load_artifacts(artifact_dir: Path) -> ModelArtifacts:
     metadata = json.loads((artifact_dir / "feature_metadata.json").read_text(encoding="utf-8"))
     validate_metadata(metadata)  # Reject legacy metadata before deserializing binaries.
+    metadata["artifact_id"] = hashlib.sha256(
+        (artifact_dir / "isolation_forest.joblib").read_bytes() +
+        (artifact_dir / "feature_scaler.joblib").read_bytes()).hexdigest()
     artifacts = ModelArtifacts(
         model=joblib.load(artifact_dir / "isolation_forest.joblib"),
         scaler=joblib.load(artifact_dir / "feature_scaler.joblib"), metadata=metadata,

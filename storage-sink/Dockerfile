@@ -5,11 +5,12 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY storage-sink/requirements.txt .
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-COPY app ./app
+COPY storage-sink/app ./app
+COPY pipeline_runtime ./pipeline_runtime
 
 CMD ["python", "-m", "app.main"]
 

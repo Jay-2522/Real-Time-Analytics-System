@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from pipeline_runtime.kafka import CONSUMER_OPTIONS, DeliveryLoop
+from pipeline_runtime.identity import coordinate, logical_key, stable_uuid, quarantine
+from pipeline_runtime.kafka import publish_confirmed
+
 import json
 import logging
 import signal
@@ -41,20 +45,12 @@ class MLInferenceConsumer:
             self._settings.kafka_consumer_group,
             self._settings.prediction_topic,
         )
-        self._consumer.subscribe(list(ANALYTICS_INPUT_TOPICS))
-
-        while self._running:
-            message = self._consumer.poll(timeout=1.0)
-            if message is None:
-                continue
-            if message.error():
-                logger.error("Kafka ML consumer error: %s", message.error())
-                continue
-            self._handle_message(message.topic(), message.value())
-
-        logger.info("closing_ml_inference_consumer")
-        self._consumer.close()
-        self._producer.flush(10)
+        try:
+            DeliveryLoop(self._consumer, "ml").run(ANALYTICS_INPUT_TOPICS,
+                lambda message: self._handle_message(message.topic(), message.value(), coordinate(message)),
+                lambda: self._running)
+        finally:
+            self._producer.flush(15)
 
     def _create_consumer(self) -> Consumer:
         consumer = Consumer(
@@ -63,7 +59,7 @@ class MLInferenceConsumer:
                 "group.id": self._settings.kafka_consumer_group,
                 "client.id": self._settings.consumer_client_id,
                 "auto.offset.reset": "earliest",
-                "enable.auto.commit": True,
+                **CONSUMER_OPTIONS,
             }
         )
         metadata = consumer.list_topics(timeout=10)
@@ -79,81 +75,51 @@ class MLInferenceConsumer:
                 "retries": 5,
                 "linger.ms": 25,
                 "enable.idempotence": True,
+                "delivery.timeout.ms": 10000,
             }
         )
         producer.list_topics(timeout=10)
         logger.info("connected_ml_prediction_producer")
         return producer
 
-    def _handle_message(self, topic: str, payload: bytes | None) -> None:
-        if payload is None:
-            self._publish_deadletter(topic, "Kafka message had empty payload", {"raw_payload": None})
-            return
-
+    def _handle_message(self, topic: str, payload: bytes | None, position=None) -> None:
         try:
-            start = time.perf_counter()
+            if payload is None:
+                raise ValueError("Kafka message had empty payload")
             parsed_payload = json.loads(payload.decode("utf-8"))
             features = self._feature_mapper.to_feature_vector(parsed_payload)
-            prediction = self._predictor.predict(
-                features=features,
-                source_event_id=self._feature_mapper.source_event_id(parsed_payload),
-                event_type=self._feature_mapper.event_type(parsed_payload, topic),
-                entity_id=self._feature_mapper.entity_id(parsed_payload),
-                window_metadata={key: parsed_payload[key] for key in (
-                    "feature_contract_version", "entity_type", "source_event_ids", "window_start",
-                    "window_end", "first_event_at", "last_event_at", "calculated_at")},
-            )
-            self._publish_prediction(prediction)
-            ML_PREDICTIONS_TOTAL.inc()
-            if prediction.is_anomaly:
-                ML_ANOMALIES_TOTAL.inc()
-            ML_INFERENCE_LATENCY_SECONDS.observe(time.perf_counter() - start)
-            logger.info(
-                "prediction_published prediction_id=%s entity_id=%s anomaly=%s risk=%s severity=%s source_topic=%s",
-                prediction.prediction_id,
-                prediction.entity_id,
-                prediction.is_anomaly,
-                prediction.ml_risk_score,
-                prediction.severity,
-                topic,
-            )
+            input_key = logical_key(topic, parsed_payload)
         except (UnicodeDecodeError, json.JSONDecodeError, ValidationError, ValueError, TypeError, KeyError) as exc:
             ML_PREDICTION_ERRORS_TOTAL.inc()
-            logger.warning("unprocessable_ml_message topic=%s reason=%s", topic, exc)
-            self._publish_deadletter(topic, str(exc), self._decode_payload(payload))
+            logger.warning("unprocessable_ml_message topic=%s reason=%s position=%s", topic, exc, position)
+            self._publish_deadletter(topic, str(exc), quarantine(topic, payload, exc, position))
+            return
+
+        start = time.perf_counter()
+        prediction = self._predictor.predict(
+            features=features, source_event_id=None, event_type=parsed_payload["event_type"],
+            entity_id=parsed_payload["entity_id"],
+            window_metadata={key: parsed_payload[key] for key in (
+                "feature_contract_version", "entity_type", "source_event_ids", "window_start",
+                "window_end", "first_event_at", "last_event_at", "calculated_at")},
+        )
+        prediction.prediction_id = stable_uuid("prediction-v1", input_key, prediction.model_name,
+                                              prediction.model_version, prediction.model_artifact_id)
+        prediction.timestamp = prediction.window_end
+        self._publish_prediction(prediction)  # Failure propagates; no input commit.
+        ML_PREDICTIONS_TOTAL.inc()
+        if prediction.is_anomaly:
+            ML_ANOMALIES_TOTAL.inc()
+        ML_INFERENCE_LATENCY_SECONDS.observe(time.perf_counter() - start)
+        logger.info("prediction_confirmed prediction_id=%s position=%s", prediction.prediction_id, position)
 
     def _publish_prediction(self, prediction: Any) -> None:
-        assert self._producer is not None
-        self._producer.produce(
-            topic=self._settings.prediction_topic,
-            key=str(prediction.prediction_id),
-            value=prediction.to_json_bytes(),
-            callback=self._delivery_report,
-        )
-        self._producer.poll(0)
+        publish_confirmed(self._producer, topic=self._settings.prediction_topic,
+                          key=str(prediction.prediction_id), value=prediction.to_json_bytes())
 
-    def _publish_deadletter(self, source_topic: str, reason: str, payload: object) -> None:
-        assert self._producer is not None
-        deadletter = DeadLetterEvent(source_topic=source_topic, reason=reason, payload=payload)
-        self._producer.produce(
-            topic=self._settings.deadletter_topic,
-            key=str(deadletter.event_id),
-            value=deadletter.to_json_bytes(),
-            callback=self._delivery_report,
-        )
-        self._producer.poll(0)
-
-    @staticmethod
-    def _decode_payload(payload: bytes) -> object:
-        try:
-            return json.loads(payload.decode("utf-8"))
-        except Exception:
-            return {"raw_payload": payload.decode("utf-8", errors="replace")}
-
-    @staticmethod
-    def _delivery_report(error: KafkaException | None, message: object) -> None:
-        if error is not None:
-            logger.error("Kafka ML delivery failed: %s", error)
+    def _publish_deadletter(self, source_topic: str, reason: str, payload: dict) -> None:
+        publish_confirmed(self._producer, topic=self._settings.deadletter_topic,
+                          key=payload["event_id"], value=json.dumps(payload).encode())
 
     def _register_shutdown_handlers(self) -> None:
         def shutdown_handler(signum: int, _frame: FrameType | None) -> None:

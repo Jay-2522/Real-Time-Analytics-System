@@ -285,8 +285,8 @@ services:
   ml-inference:
     container_name: streaming-analytics-ml-inference
     build:
-      context: ./ml-models
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ml-models/Dockerfile
     env_file:
       - ./.env
     environment:
@@ -317,8 +317,8 @@ services:
   storage-sink:
     container_name: streaming-analytics-storage-sink
     build:
-      context: ./storage-sink
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: storage-sink/Dockerfile
     env_file:
       - ./.env
     environment:
@@ -351,8 +351,8 @@ services:
   alert-engine:
     container_name: streaming-analytics-alert-engine
     build:
-      context: ./alert-engine
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: alert-engine/Dockerfile
     env_file:
       - ./.env
     environment:

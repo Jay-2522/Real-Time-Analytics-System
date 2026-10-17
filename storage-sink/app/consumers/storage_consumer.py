@@ -1,3 +1,8 @@
+from pipeline_runtime.durable import claim, enqueue, OutboxWorker, IdentityConflict
+from pipeline_runtime.identity import logical_key, quarantine
+from app.schemas.records import StorageRecord
+from pipeline_runtime.kafka import CONSUMER_OPTIONS, DeliveryLoop
+from pipeline_runtime.identity import coordinate
 import json
 import logging
 import signal
@@ -34,24 +39,22 @@ class StorageSinkConsumer:
         self._cache = cache
         self._consumer: Consumer | None = None
         self._running = True
+        self._outbox = OutboxWorker(session_factory, "storage", {
+            "elasticsearch": lambda key, payload: self._indexer.index(StorageRecord.model_validate(payload), key),
+            "redis": lambda key, payload: self._cache.update(StorageRecord.model_validate(payload), key),
+        })
 
     def run(self) -> None:
         self._register_shutdown_handlers()
         self._consumer = retry_with_backoff(self._create_consumer, logger, "Kafka storage sink consumer connection")
         logger.info("subscribing_storage_sink topics=%s group=%s", STORAGE_INPUT_TOPICS, self._settings.kafka_consumer_group)
-        self._consumer.subscribe(list(STORAGE_INPUT_TOPICS))
-
-        while self._running:
-            message = self._consumer.poll(timeout=1.0)
-            if message is None:
-                continue
-            if message.error():
-                logger.error("kafka_storage_sink_error error=%s", message.error())
-                continue
-            self._handle_message(message.topic(), message.value())
-
-        logger.info("closing_storage_sink_consumer")
-        self._consumer.close()
+        self._outbox.start()
+        try:
+            DeliveryLoop(self._consumer, "storage").run(STORAGE_INPUT_TOPICS,
+                lambda message: self._handle_message(message.topic(), message.value(), coordinate(message)),
+                lambda: self._running)
+        finally:
+            self._outbox.stop()
 
     def _create_consumer(self) -> Consumer:
         consumer = Consumer(
@@ -60,44 +63,47 @@ class StorageSinkConsumer:
                 "group.id": self._settings.kafka_consumer_group,
                 "client.id": self._settings.consumer_client_id,
                 "auto.offset.reset": "earliest",
-                "enable.auto.commit": True,
+                **CONSUMER_OPTIONS,
             }
         )
         metadata = consumer.list_topics(timeout=10)
         logger.info("kafka_connected brokers=%s", len(metadata.brokers))
         return consumer
 
-    def _handle_message(self, topic: str, payload: bytes | None) -> None:
+    def _persist(self, record, key):
+        with self._session_factory() as session, session.begin():
+            if not claim(session, "storage", key, record.raw_payload):
+                return
+            self._repository.persist(session, record)
+            body = record.model_dump(mode="json")
+            enqueue(session, "storage", key, "elasticsearch", body)
+            enqueue(session, "storage", key, "redis", body)
+        RECORDS_PERSISTED_TOTAL.labels(record.record_kind).inc()
+
+    def _handle_message(self, topic: str, payload: bytes | None, position=None) -> None:
         try:
             if payload is None:
                 raise ValueError("Kafka message payload is empty")
             parsed = json.loads(payload.decode("utf-8"))
+            key = logical_key(topic, parsed)
             record = map_payload_to_record(topic, parsed)
-        except Exception as exc:
-            logger.warning("storage_sink_malformed topic=%s reason=%s", topic, exc)
-            record = map_payload_to_record(
-                TELEMETRY_DEADLETTER_EVENTS,
-                {"source_topic": topic, "reason": str(exc), "payload": payload.decode("utf-8", errors="replace") if payload else None},
-            )
-
+            # Validate canonical JSON before opening the database transaction.
+            from pipeline_runtime.identity import digest
+            digest(parsed)
+        except (UnicodeError, ValueError, TypeError, KeyError) as exc:
+            body = quarantine(topic, payload, exc, position)
+            record = map_payload_to_record(TELEMETRY_DEADLETTER_EVENTS, body)
+            key = logical_key(TELEMETRY_DEADLETTER_EVENTS, body)
         try:
-            with self._session_factory() as session:
-                self._repository.persist(session, record)
-                session.commit()
-            RECORDS_PERSISTED_TOTAL.labels(record.record_kind).inc()
+            self._persist(record, key)
+        except IdentityConflict as exc:
+            logger.error("storage_identity_conflict position=%s error=%s", position, exc)
+            body = quarantine(topic, payload, exc, position)
+            self._persist(map_payload_to_record(TELEMETRY_DEADLETTER_EVENTS, body),
+                          logical_key(TELEMETRY_DEADLETTER_EVENTS, body))
         except Exception:
             POSTGRES_WRITE_ERRORS_TOTAL.inc()
             raise
-
-        self._indexer.index(record)
-        self._cache.update(record)
-        logger.info(
-            "record_persisted kind=%s topic=%s entity_id=%s event_type=%s",
-            record.record_kind,
-            topic,
-            record.entity_id,
-            record.event_type,
-        )
 
     def _register_shutdown_handlers(self) -> None:
         def shutdown_handler(signum: int, _frame: FrameType | None) -> None:
