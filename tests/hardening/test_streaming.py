@@ -1,9 +1,15 @@
 """Explicit opt-in checks against only the new mTLS broker and Spark cluster."""
 import os
+from pathlib import Path
 import pytest
 from test_stack import compose
 
 pytestmark=[pytest.mark.integration,pytest.mark.skipif(os.environ.get('HARDENED_STREAMING_INTEGRATION')!='1',reason='Requires isolated secured messaging and compute services')]
+
+
+@pytest.fixture(autouse=True)
+def disposable_deployment():
+    assert (Path(os.environ['HARDENED_SECRETS_DIR'])/'test-only').is_file(), 'Requires a marked disposable deployment'
 
 
 def test_kafka_mtls_and_topic_acl():
@@ -44,6 +50,7 @@ assert os.geteuid()==185
 spark=SparkSession.builder.appName('IsolatedSecurityVerification').getOrCreate()
 assert spark.sparkContext.getConf().get('spark.authenticate')=='true'
 assert spark.sparkContext.getConf().get('spark.network.crypto.enabled')=='true'
+assert spark.sparkContext.getConf().get('spark.io.encryption.enabled')=='true'
 assert spark.range(4).count()==4
 frame=spark.read.format('kafka').option('kafka.bootstrap.servers','kafka:9092').options(**kafka_java_options()).option('subscribe','telemetry.login.events').option('startingOffsets','earliest').option('endingOffsets','latest').load()
 assert frame.count()>0

@@ -152,7 +152,7 @@ services:
       retries: 3
   prometheus:
     <<: *restricted
-    image: prom/prometheus:v2.55.1
+    image: prom/prometheus:v3.13.4@sha256:87861b8cf91579109319ebc300f3f1060e6da9c05d6ae8ad15a20c879e84e32e
     user: '65534:65534'
     read_only: true
     command: ['--config.file=/etc/prometheus/prometheus.yml','--web.config.file=/run/security/web.yml','--storage.tsdb.retention.time=7d']
@@ -163,7 +163,7 @@ services:
     networks: [monitoring]
   grafana:
     <<: *restricted
-    image: grafana/grafana:11.6.16
+    image: grafana/grafana:12.4.13@sha256:41bbc1b5e04416f81891806076db2a2ff60a5d4da5f78d36a88b033a8c199185
     user: '472:472'
     read_only: true
     tmpfs: [/tmp]
@@ -182,7 +182,10 @@ services:
   kafka:
     <<: *restricted
     profiles: [streaming]
-    image: confluentinc/cp-kafka:7.6.14
+    image: soc-hardened-kafka
+    build:
+      context: ../..
+      dockerfile: deploy/hardened/kafka.Dockerfile
     user: '1000:1000'
     command: ['bash','-ec','export CLUSTER_ID=$$(cat /etc/kafka/secrets/cluster-id); exec /etc/confluent/docker/run']
     environment:
@@ -219,7 +222,7 @@ services:
     <<: *restricted
     profiles: [setup]
     restart: 'no'
-    image: confluentinc/cp-kafka:7.6.14
+    image: soc-hardened-kafka
     user: '1000:1000'
     read_only: true
     tmpfs: [/tmp]

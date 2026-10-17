@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 from pyspark.sql import functions as F
+from infrastructure_runtime.security import kafka_java_options
 from app.config.settings import SparkStreamingSettings
 from app.utils.spark import create_spark_session
 from app.main import build_source_stream
@@ -28,7 +29,7 @@ try:
         def sink(batch, batch_id, name=name):
             wire = batch.select(F.to_json(F.struct(*[F.col(c) for c in batch.columns]),
                                {'ignoreNullFields':'false','timeZone':'UTC'}).alias('value'))
-            wire.write.format('kafka').option('kafka.bootstrap.servers', settings.kafka_bootstrap_servers).option('topic',prefix+'.'+name).save()
+            wire.write.format('kafka').option('kafka.bootstrap.servers', settings.kafka_bootstrap_servers).option('topic',prefix+'.'+name).options(**kafka_java_options()).save()
             if name == 'features' and os.environ.get('RECOVERY_CRASH') == '1' and batch_id == 1:
                 Path('/checkpoint/crash-evidence.json').write_text(json.dumps({'query':name,'batch':batch_id,'sink_written':True}))
                 os._exit(77)

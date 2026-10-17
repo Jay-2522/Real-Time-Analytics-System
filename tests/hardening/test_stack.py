@@ -8,6 +8,7 @@ import secrets
 import ssl
 import subprocess
 import time
+import tempfile
 
 import httpx
 import pytest
@@ -16,9 +17,15 @@ ROOT=Path(__file__).resolve().parents[2]
 pytestmark=[pytest.mark.integration,pytest.mark.skipif(os.environ.get('HARDENED_INTEGRATION')!='1',reason='Requires isolated hardened deployment')]
 
 
-def compose(*args,input=None):
-    result=subprocess.run(['docker','compose','-f',str(ROOT/'deploy/hardened/compose.yml'),*args],input=input,text=True,capture_output=True,timeout=90)
-    assert result.returncode==0, 'Isolated deployment command failed; inspect private local logs'
+def compose(*args,input=None,timeout=90,expected_returncode=0):
+    result=subprocess.run(['docker','compose','-f',str(ROOT/'deploy/hardened/compose.yml'),*args],input=input,text=True,capture_output=True,timeout=timeout)
+    if result.returncode!=expected_returncode:
+        # Keep diagnostics private and ignored; never expose credentials in pytest output.
+        directory=ROOT/'.codex-logs/hardening'
+        directory.mkdir(parents=True,exist_ok=True)
+        with tempfile.NamedTemporaryFile(mode='w',dir=directory,prefix='failure-',suffix='.log',delete=False) as log:
+            log.write(result.stdout+'\n'+result.stderr)
+        raise AssertionError('Isolated deployment command failed; private diagnostics: '+log.name)
     return result.stdout
 
 

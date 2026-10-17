@@ -134,19 +134,26 @@ never add that marker to a real deployment. Run:
 HARDENED_INTEGRATION=1 HARDENED_WORKERS_INTEGRATION=1 \
   .venv/bin/python -m pytest tests/hardening/test_configuration.py tests/hardening/test_stack.py -ra
 HARDENED_STREAMING_INTEGRATION=1 .venv/bin/python -m pytest tests/hardening/test_streaming.py -ra
-AUTH_BROWSER_INTEGRATION=1 PIPELINE_INTEGRATION=1 SPARK_RECOVERY_INTEGRATION=1 \
-  .venv/bin/python -m pytest -ra
+AUTH_BROWSER_INTEGRATION=1 HARDENED_INTEGRATION=1 HARDENED_WORKERS_INTEGRATION=1 \
+  HARDENED_STREAMING_INTEGRATION=1 HARDENED_RECOVERY_INTEGRATION=1 \
+  HARDENED_MONITORING_INTEGRATION=1 .venv/bin/python -m pytest -ra
 (cd frontend && npm run lint && npm run build)
 .venv/bin/pip-audit -r requirements-test.txt
 (cd frontend && npm audit)
 trivy image --scanners vuln IMAGE
 ```
 
+The legacy `PIPELINE_INTEGRATION` and `SPARK_RECOVERY_INTEGRATION` opt-ins
+target development endpoints. Leave them disabled when preserving that deployment;
+the hardened recovery tests use marked disposable state and verified TLS instead.
+Run the actual Spark contract test first and set `SPARK_CONTRACT_OUTPUT` to its
+local JSON output to enable the cross-service mapper check.
+
 Keep scan results, certificates, fixtures and runtime evidence outside Git.
 The tests permanently guard fail-closed configuration, TLS/ACL rejection, secure
 browser authentication/WebSockets, network reachability and readiness recovery.
 
-## Vulnerability assessment (17 October 2026)
+## Historical Phase 3B vulnerability assessment (17 October 2026)
 
 Trivy findings are package matches, not proof of exploitability. Reachability for
 individual findings is unverified unless stated. Do not treat isolation as a fix.
@@ -261,7 +268,7 @@ have Docker health probes; worker/Spark readiness currently requires operational
 metrics and external verification. Tags remain mutable: release engineering must
 lock tested image digests and re-scan before any approved deployment.
 
-## Verification outcome
+## Historical Phase 3B verification outcome
 
 CONDITIONAL PASS for the tested controls; production remediation remains incomplete.
 
@@ -287,3 +294,219 @@ CONDITIONAL PASS for the tested controls; production remediation remains incompl
   and database-outage readiness recovery while liveness stays up.
 - Original Spark worker ID `7d1305599c45` and stopped driver ID `322fa4d3af1c` were
   preserved. The historical driver was never started.
+
+## Phase 3C assessment (17 October 2026)
+
+The Phase 3B numbers above are historical. Fresh Trivy 0.76.0 scans reproduced
+that hardened baseline before this work. Findings count package occurrences,
+including duplicate embedded libraries/binaries; they are not exploit counts.
+No finding is suppressed. Runtime acceptance is reported separately below;
+scanner reductions do not constitute production approval.
+
+| Component | Baseline critical / high | Updated critical / high | Decision |
+| --- | ---: | ---: | --- |
+| Spark 3.5.7 / Debian 12 | 8 / 165 | 6 / 145 | Spark 3.5.9, matching Scala 2.12 Kafka connector; Python 3.11 on Debian 13; Java 17 retained |
+| Confluent Kafka 7.6.14 | 3 / 65 | 1 / 48 | Same broker with UBI package errata; no independent Java library replacement |
+| Prometheus 2.55.1 | 4 / 106 | 0 / 10 | 3.13.4 LTS |
+| Grafana 11.6.16 | 1 / 71 | 0 / 5 | 12.4.13 supported maintenance line |
+
+Confluent 7.9.10 was also scanned: **3 critical / 69 high**, with the same
+critical Netty/unbound matches. It was rejected because it added compatibility
+work without resolving those findings. The chosen UBI update installs vendor
+`python3-unbound` and `unbound-libs` **1.16.2-5.14.el8_10.4**, fixing
+CVE-2026-81642, and updates other supported OS packages. Broker version remains
+7.6.14-ccs. Vendor Java libraries and startup tooling remain intact.
+Spark runtime pip/setuptools/wheel are removed after dependency installation;
+Python application dependencies remain unchanged and their audit passed.
+
+### Pinned upstream inputs and provenance
+
+All references below are upstream multi-platform manifest-list digests. Runtime
+verification in this environment covers **linux/arm64**, not amd64. Dockerfiles
+pin upstream inputs; package repositories and Python transitive dependencies
+can still change a rebuilt image. Capture the resulting platform image digest,
+SBOM and fresh scan for every subsequent build before deployment.
+
+| Input | Pinned digest (SHA-256) |
+| --- | --- |
+| apache/spark:3.5.9 | `af02a459c8706e031c835c16f9db3c463816776e2543dd0f828af65606bcf392` |
+| eclipse-temurin:17-jre | `e04fa72be13b257a59fdec6dc14af78c8f80f035d3c1ed4e03e45552a231d4c8` |
+| python:3.11-slim-trixie | `e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce` |
+| confluentinc/cp-kafka:7.6.14 | `b20da2c030172c556f1a5569ef70110e1b2937dcc03356a90da93ffa4467791f` |
+| prom/prometheus:v3.13.4 | `87861b8cf91579109319ebc300f3f1060e6da9c05d6ae8ad15a20c879e84e32e` |
+| grafana/grafana:12.4.13 | `41bbc1b5e04416f81891806076db2a2ff60a5d4da5f78d36a88b033a8c199185` |
+
+Sources: [Spark maintenance recommendation](https://spark.apache.org/releases/spark-release-3-5-9.html),
+[Confluent 7.6 changelog](https://docs.confluent.io/platform/7.6/release-notes/changelog.html),
+[Prometheus LTS downloads](https://prometheus.io/download/),
+[Prometheus 3 migration guide](https://prometheus.io/docs/prometheus/latest/migration/),
+and [Grafana supported release lines](https://grafana.com/docs/grafana/latest/upgrade-guide/when-to-upgrade/).
+BuildKit records build provenance locally; upstream signatures have not been
+independently verified. A digest establishes content identity, not publisher trust.
+
+### Residual critical findings and deployment boundaries
+
+| Finding | Runtime evidence and exposure classification | Required action |
+| --- | --- | --- |
+| CVE-2026-75595, Netty (Spark 4.1.96.Final; Kafka 4.1.136.Final) | Libraries remain present. The exploit requires a Netty SNI-specific client-auth gate with a permissive default SSL context. Kafka uses mandatory listener-wide JSSE mTLS; Spark uses authenticated encrypted RPC, without that SNI routing configuration. Those exploit prerequisites are absent from this deployment. | Retain mandatory authentication and current transport design; obtain a compatible upstream bundle with Netty 4.1.137+; reassess any TLS/SNI configuration change. |
+| CVE-2024-47561, Avro 1.7.7 (two occurrences) | Avro schema classes exist inside shaded Hadoop runtime JARs. The pipeline consumes JSON with fixed Spark schemas, not caller-supplied Avro schemas. No direct vulnerable schema-parsing entry point is configured; complete dynamic reachability is unverified. | Block untrusted Avro schemas and arbitrary Spark jobs. Upstream Hadoop/Spark remediation and deeper reachability review remain production gates. |
+| CVE-2022-46337, Derby 10.14.2.0 | LDAP-authenticated Derby server is a prerequisite. No Derby network/LDAP service or Hive-enabled session is configured. | Do not enable those services; await an upstream-compatible fix instead of independently replacing Derby. |
+| CVE-2023-44981, ZooKeeper 3.6.3 | The library is bundled, but this stack runs Kafka KRaft and standalone Spark without ZooKeeper recovery. No SASL-authenticated ZooKeeper quorum is deployed. | Keep this boundary; use a fixed upstream ZooKeeper before adding any quorum. |
+| CVE-2019-10202, Codehaus Jackson 1.9.13 | ObjectMapper classes are present in standalone/shaded JARs. The application uses fixed Spark JSON schemas; an unsafe polymorphic Codehaus deserialization path has not been demonstrated or exhaustively ruled out. No scanner-listed fix. | Unsupported dependency replacement must come through compatible upstream Hadoop/Spark releases; deeper reachability review remains a production gate. |
+
+The Debian 13 base removes the SQLite CVE-2025-7458 and zlib CVE-2023-45853
+matches. The latter was already a source-package mismatch in the old runtime:
+[Debian states the affected MiniZip code is not built into the Bookworm zlib binary](https://security-tracker.debian.org/tracker/CVE-2023-45853),
+and runtime inspection found neither a MiniZip library nor pyminizip. No exclusion
+was added to hide it. SQLite exists through Python, but this pipeline does not
+accept arbitrary SQLite SQL.
+
+The Spark base change introduces eight high package matches: CVE-2026-76642,
+CVE-2026-78408, CVE-2026-78409 and CVE-2026-78410, each reported for
+`login` and `liblastlog2-2` from util-linux. No fixed Debian version is listed.
+These advisories concern privileged mount/nsenter operations. UID 185, dropped
+capabilities, no-new-privileges and the absence of host-namespace access remain
+required boundaries; they do not patch the packages. Track vendor errata and
+reassess any change to users, capabilities or mounts.
+
+Prometheus resolves the old critical gRPC CVE-2026-33186 and Go TLS
+CVE-2025-68121 matches. Its remaining high matches are CVE-2026-78667,
+CVE-2026-78669, CVE-2026-84445 and CVE-2026-97031 across Go stdlib, x/net
+and gRPC, repeated in prometheus/promtool. The configuration has no xDS gRPC
+server, TLS listener or ECH; HTTP Range/HTTP2 reachability requires further
+review. Basic authentication and internal networking do not constitute a patch.
+
+Grafana resolves GHSA-r277-6w6q-xmqw. Remaining high findings are
+CVE-2026-100352/100353/100354 in kin-openapi and CVE-2026-21728/28377 in
+its Tempo dependency. CVE-2026-100353 is a newly introduced package match
+relative to the old image and is not omitted from acceptance. There is no Tempo
+server or S3 SSE-C configuration in this stack; Grafana's OpenAPI decoder paths
+still need detailed reachability review and upstream patches. Anonymous access
+must remain disabled; retain file-based administrator credentials and internal-only access.
+
+Full per-package findings (installed/fixed versions, paths, source references,
+reachability/actionability notes), rejected-candidate scans and generated evidence
+remain under the ignored local `.codex-logs/phase3c/` directory. Generic high
+findings not specifically analyzed remain **unverified**, not "non-exploitable".
+No comprehensive proof of high-severity exploitability or absence is claimed.
+
+### Final artifact identity
+
+The isolated arm64 runtime uses these platform manifest digests. Export/import
+preserved every root filesystem layer and the complete runtime configuration
+compared with the freshly scanned source images. The upstream index digests
+above select these architecture-specific artifacts for the monitoring images.
+
+| Component | Tested arm64 platform manifest (SHA-256) |
+| --- | --- |
+| spark | `4b8fdd002a360f5c8241bca3d892dc428069908a326078cb1c498d3c662c3b31` |
+| kafka | `4146b2ed5281904544938f61cbf96fdc3095d45ea148e77d06fa88604966244f` |
+| prometheus | `765261de302accc2aa2fa1c74aed31ce51c0acd92a0a55406903dbacc18ea39c` |
+| grafana | `04ddb75abcf1584ac60149bf75a40b4d0a8dbe40bbdcf0b5c10a1ad6c0562634` |
+
+Four CycloneDX SBOMs, complete scanner JSON, and per-package comparisons are
+retained locally and excluded from Git. A removed package match can reflect a
+package rename or packaging change; the complete introduced/remaining lists
+must be considered alongside the resolved list. No ignore rule was added.
+
+### Upgrade and rollback boundaries
+
+Prometheus 3 changes scrape Content-Type validation and some PromQL boundary
+semantics. Retain the existing seven jobs, labels, seven-day retention and basic
+API authentication; check exporter health and every repository dashboard query.
+Grafana 12 migrates its database on startup. Before any approved deployment,
+stop writes and take restorable backups of monitoring volumes and provisioning
+configuration. Retain the previous images. A rollback must restore the matching
+pre-upgrade data backup; do not point an older binary at an upgraded database.
+No migration or downgrade of retained Phase 3B or original development state is
+authorized by this validation. The isolated test is not a substitute for backups
+and staging validation of the actual deployment's data size and plugins.
+
+### Phase 3C runtime evidence and limitations
+
+Validation uses a separate Colima VM, new test-only credentials, fresh volumes,
+unique Kafka topics/groups and isolated Spark checkpoints. The arm64 VM has
+4 GiB RAM, two CPUs and temporary 2 GiB swap. This is functional validation,
+not sustained-load or production-capacity evidence. Host memory pressure delayed
+initialization; pausing an unrelated simulator workload improved responsiveness.
+
+- Spark 3.5.9 / Java 17.0.20.1 / Python 3.11.17: five actual feature-contract
+  tests passed. The runtime runs as UID 185 with zero effective capabilities,
+  no-new-privileges, and no pip/setuptools/wheel. SQLite is 3.46.1.
+- Secured streaming: two tests passed for Kafka mTLS, anonymous/ACL rejection,
+  non-root Spark execution, authenticated encrypted RPC, I/O encryption,
+  Kafka TLS reads and isolated checkpoint writes.
+- Infrastructure: six HTTPS/browser/WebSocket, identity, network, monitoring
+  authentication and database-outage/readiness tests passed. All three scoped
+  worker SQL/search/cache tests passed after worker initialization completed.
+- Monitoring: the seven configured exporters scrape successfully, Grafana can
+  query its protected datasource, and anonymous API access is rejected. The
+  baseline-to-upgrade migration preserved five repository dashboards, their
+  panel counts, datasource UID and a historical backend metric sample. Every
+  repository dashboard PromQL expression executed successfully. Seven-day
+  retention, labels, credentials and network exposure are unchanged.
+- All five running Spark master/worker, Kafka, Prometheus and Grafana services
+  matched the scanned image filesystem layers and runtime configuration.
+  Spark Python requirements audit found zero known vulnerabilities.
+
+The Kafka CLI initialized topics and part of the ACL inventory. Because repeated
+JVM startup was slow under host pressure, a disposable Admin API helper completed
+and verified the exact 25 ACL entries from `kafka-init.sh`. No production ACL scope
+was broadened. The recovery fixture adds only its unique test topic prefix for
+Spark. Startup ordering, an Admin-client lifetime bug, a JSON/JSONB assertion and
+a too-short crashed-member wait caused preliminary test failures; these are test
+setup/assertion corrections, not weakened security controls or application fixes.
+
+Original state: all 36 original container IDs were retained. The original Spark
+worker retained its start time, and the damaged-checkpoint driver remained stopped.
+The original development storage-sink independently exited with Kafka
+`UNKNOWN_MEMBER_ID` and restarted under its existing policy (exit code 1); its
+start time therefore changed. No command stopped/recreated that container or reset
+its offsets, and no original checkpoint, retained volume or database migration was
+performed. Its automatic restart must not be described as an unchanged runtime.
+
+Production remains blocked by seven critical and 208 high package occurrences,
+unverified dynamic reachability for the remaining Avro/Codehaus paths, outstanding
+vendor patches, amd64 validation, and capacity/soak testing. The ten legacy
+integration cases targeting development endpoints remain disabled to preserve that
+environment; isolated secured tests are not a claim that every legacy scenario was
+repeated. Existing Phase 3B release blockers still apply. No frontend dependency
+changed, so frontend checks were not repeated for this image-only change.
+
+### Final Phase 3C acceptance
+
+**CONDITIONAL PASS for the verified improvements; not approved for production.**
+Fresh scans reduce totals from **16 critical / 407 high** to **7 critical / 208 high**.
+All relevant final assertions passed without disabling TLS, ACLs, RPC encryption,
+non-root execution, isolation, acknowledgement checks or replay-safety assertions.
+
+Across final focused runs, **91 distinct repository tests passed, zero failed,
+and 10 legacy integration tests were skipped** out of 101 collected tests:
+
+| Final scope | Passed | Failed | Skipped |
+| --- | ---: | ---: | ---: |
+| Python non-integration and isolated browser | 77 | 0 | 0 |
+| Hardened infrastructure and worker permissions | 9 | 0 | 0 |
+| Secured Kafka/Spark | 2 | 0 | 0 |
+| Authenticated monitoring | 1 | 0 | 0 |
+| Hardened crash/replay and durable processing | 2 | 0 | 0 |
+| Legacy development-endpoint integration | 0 | 0 | 10 |
+
+The non-integration final rerun was 76 passed / 1 skipped / 24 deselected; the
+skipped browser case then passed with `AUTH_BROWSER_INTEGRATION=1`. A prior
+complete non-integration run also passed 77 tests. The separate actual Spark
+feature-contract suite passed **5/5** and is not included in the 101 root tests.
+Compose validation and Python compilation passed. Frontend checks are not
+applicable to the unchanged frontend dependencies.
+
+The final recovery run passed both tests in 157.27 seconds. It verifies a missing
+checkpoint commit after a real process exit, replay with the same query identity,
+continued windows, all 18 contract-2.0 features and exact event lineage. Six
+feature deliveries representing four logical windows yield exactly four durable
+predictions and four alerts in both PostgreSQL and Elasticsearch. A separate
+consumer process test verifies no acknowledgement on a terminated database
+connection, process death after durable SQL but before acknowledgement, successful
+redelivery after normal group reassignment, and one row after duplicate replay.
+These permanent tests protect the critical compatibility and data-integrity
+boundaries affected by runtime upgrades; temporary migration/setup probes and
+execution evidence remain untracked.
