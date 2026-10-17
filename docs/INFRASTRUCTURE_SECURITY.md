@@ -510,3 +510,207 @@ redelivery after normal group reassignment, and one row after duplicate replay.
 These permanent tests protect the critical compatibility and data-integrity
 boundaries affected by runtime upgrades; temporary migration/setup probes and
 execution evidence remain untracked.
+
+## Phase 3D residual critical investigation (18 October 2026)
+
+**CONDITIONAL PASS for investigation; production remains blocked.** No runtime,
+JAR, image pin, dependency, transport or authorization configuration changed.
+The clean `dev` baseline was `d0e6ce038b44b31bbb58ceb4f90de5926362bc42`, tracking
+`origin/dev`. Reinspection and benign probes use the exact Phase 3C arm64 images,
+not the older `soc-hardened` containers remaining in the development Docker context.
+Spark source image/index is `sha256:fe397004c6115f17e583821c622fe36903e45916317d3d292cd1520b045d2f86`;
+Kafka is `sha256:490ea76a88fb440cf834b7f8a3a7c00758a19f6427b4f7fc3321ed4cae946951`.
+Their transferred platform manifests and upstream input pins remain recorded above.
+
+### Occurrence inventory and classifications
+
+These conclusions apply only to the repository application and hardened Compose
+configuration. They exclude arbitrary submitted jobs, administrator-controlled
+plugins/configuration and untrusted model/checkpoint replacement. Such access is
+already a powerful execution capability, not an event-producer entitlement.
+Internal networking alone is not evidence of non-reachability. No scanner findings
+are suppressed or reclassified in the scanner database.
+
+| Occurrence | Exact runtime package path and version | Classification | Evidence and invalidating changes |
+| --- | --- | --- | --- |
+| Netty CVE-2026-75595, Spark | `/opt/spark/jars/netty-handler-4.1.96.Final.jar`; `io.netty:netty-handler` 4.1.96.Final | **Mitigated** under the defined transport | Authenticated encrypted Spark RPC uses `AuthServerBootstrap`, not per-SNI TLS selection. No external SNI call site was found in the image class-reference search. Reassess custom channel handlers, TLS termination, additional services and untrusted job submission. |
+| Netty CVE-2026-75595, Kafka | `/usr/share/java/kafka/netty-handler-4.1.136.Final.jar`; `io.netty:netty-handler` 4.1.136.Final | **Mitigated** under the defined transport | Actual broker classes use Kafka `SslChannelBuilder`/`SslTransportLayer` and JSSE, with listener-wide `ssl.client.auth=required`. Bytecode calls `SSLEngine.setNeedClientAuth`. A fresh isolated broker rejects a client without a certificate. Reassess Netty-based proxies/plugins and permissive fallback contexts. |
+| Avro CVE-2024-47561, first shaded copy | `/opt/spark/jars/hadoop-client-runtime-3.3.4.jar`; embedded `org.apache.avro:avro` 1.7.7 | **Unverified** | Shaded Specific/Reflect readers exist; Hadoop API classes reference them. No event-to-schema path was demonstrated, but indirect serialization paths remain incompletely traced. |
+| Avro CVE-2024-47561, second shaded copy | `/opt/spark/jars/org.apache.hadoop_hadoop-client-runtime-3.3.4.jar`; embedded `org.apache.avro:avro` 1.7.7 | **Unverified** | Byte-identical to the first copy (SHA-256 `9377a68071137ae5f5c8cdc2ed20d6f904a1df4d06df26b47ed8872a1b0d8d47`); same classes and limitations. This is a second scanner occurrence, not a separately proven exploit path. |
+| Derby CVE-2022-46337 | `/opt/spark/jars/derby-10.14.2.0.jar`; `org.apache.derby:derby` 10.14.2.0 | **Not applicable** to the defined pipeline | No Derby JDBC connection, LDAP authentication provider or Derby service is configured; Spark uses the in-memory catalog. No Derby classes loaded in the exercised JSON/state/checkpoint flow. Enabling Hive, Derby JDBC or LDAP authentication invalidates this conclusion. |
+| ZooKeeper CVE-2023-44981 | `/opt/spark/jars/zookeeper-3.6.3.jar`; `org.apache.zookeeper:zookeeper` 3.6.3 | **Not applicable** to the defined pipeline | KRaft broker/controller and standalone Spark without ZooKeeper recovery; no quorum service or SASL quorum configuration. No ZooKeeper classes loaded in the exercised pipeline. Enabling ZooKeeper recovery, an embedded server or another quorum requires reassessment. |
+| Codehaus Jackson CVE-2019-10202 | `/opt/spark/jars/jackson-mapper-asl-1.9.13.jar`; `org.codehaus.jackson:jackson-mapper-asl` 1.9.13 | **Unverified** | Unsafe polymorphic binding has not been demonstrated in the application, but complete dependency-level data flow has not been proved absent. Shaded Codehaus mapper/type-resolver classes also exist in both Hadoop runtime copies, beyond this standalone scanner match. |
+
+### Exploit requirements, source evidence and fix decisions
+
+**Netty:** [upstream advisory GHSA-c4c3-7fpv-j4q5](https://github.com/netty/netty/security/advisories/GHSA-c4c3-7fpv-j4q5)
+identifies malformed fragmented ClientHello handling in `SslClientHelloHandler.decode`.
+Authentication bypass requires per-SNI client authentication, a permissive default
+context and no secondary certificate check. A network peer need not authenticate
+if those prerequisites exist. The affected ranges include both installed versions;
+fixes are 4.1.137.Final and 4.2.17.Final. Spark's inspected network initialization
+and the broker's actual JSSE implementation do not provide that fallback route.
+The vendor calls this High while Trivy reports Critical; neither label establishes
+reachability. The mitigation is the verified transport design, not a patch.
+
+The [Confluent 7.6 changelog](https://docs.confluent.io/platform/7.6/release-notes/changelog.html)
+mentions Netty 4.1.137 updates under Common/ksqlDB. This does not establish that the
+broker image contains them: the registry still resolves 7.6.14 to the pinned
+`b20da2c0...` index and the tested broker contains 4.1.136.Final. Do not claim the
+broker is fixed from component release notes alone. Spark's current recommended
+[3.5 maintenance release](https://spark.apache.org/releases/spark-release-3-5-9.html)
+is already in use and still bundles 4.1.96.Final. No independently replaced Netty
+JAR or untested cross-major migration was adopted. Obtain a vendor bundle and
+repeat secure transport/recovery verification before changing these inputs.
+
+**Avro:** the [Apache advisory](https://lists.apache.org/thread/c2v7mhqnmq0jmbwxqq3r5jbj1xg43h5x)
+covers Java versions before 1.11.4; 1.11.4/1.12.0 contain the fix. The
+[upstream correction](https://github.com/apache/avro/pull/2934) adds trusted-package
+checks around schema-directed class resolution. The old
+[SpecificDatumReader](https://raw.githubusercontent.com/apache/avro/release-1.7.7/lang/java/avro/src/main/java/org/apache/avro/specific/SpecificDatumReader.java)
+resolves `java-class`/`java-key-class` schema properties through `getPropAsClass`.
+An attacker must influence a schema used by an affected reader and reach a usable
+classpath class/constructor; parsing an ordinary event string is not sufficient.
+Do not invoke dangerous classes to test this prerequisite.
+
+The normal unshaded Avro is **1.11.5**, separately loaded from `avro-1.11.5.jar`;
+that does not fix relocated `org.apache.hadoop.shaded.org.apache.avro` classes.
+The Hadoop API contains references from `AvroSpecificSerialization`,
+`AvroReflectSerialization` and MapReduce `EventReader` to those shaded readers.
+The live Hadoop `io.serializations` default includes both Avro serializers;
+therefore JSON ingestion alone cannot justify a Not applicable classification.
+The application uses fixed StructTypes, Kryo, local checkpoints and `file:///`,
+with no schema registry, Avro input or MapReduce job-history reader configured.
+Neither shaded Avro nor Codehaus loaded before explicit class-origin introspection
+in the benign probe. This bounds the observation; it is not an exhaustive call graph.
+
+Restrict schemas, filesystem configuration, jobs, plugins and checkpoint ownership
+to trusted administrators. New Avro/file formats, HDFS/MapReduce integrations,
+serializer overrides or schema-bearing event handling invalidate this boundary.
+The package allowlist added by newer Avro is not assumed to work in shaded 1.7.7.
+A supported Spark/Hadoop bundle removing the old shaded implementation, or a
+complete bounded data-flow review, remains necessary. Replacing unshaded Avro or
+removing one duplicate Hadoop JAR is not a defensible remediation for both copies.
+
+**Derby:** [DERBY-7147](https://issues.apache.org/jira/browse/DERBY-7147)
+locates LDAP filter injection in `LDAPAuthenticationSchemeImpl.getDNFromUID`.
+An attacker must supply a login identifier to an application using Derby LDAP
+authentication. This can include embedded Derby: the earlier Phase 3C wording
+about a network server was too narrow. Here no Derby/LDAP authentication service
+is activated, and the observed catalog is `in-memory` with Derby authentication
+system properties unset. Absence of a network port alone is not the conclusion.
+
+Scanner-listed 10.14.2.1, 10.15.2.1 and 10.16.1.2 POM URLs returned HTTP 404 from
+Maven Central; 10.17.1.0 returned 200. [DERBY-7178](https://issues.apache.org/jira/browse/DERBY-7178)
+describes the unreleased 10.14 branch fix/version ambiguity. The
+[official downloads page](https://db.apache.org/derby/derby_downloads.html)
+requires Java 21 for published 10.17.1.0 and confirms Derby retired in October
+2025. Java 17 is retained. A scanner fixed-version field is not proof of an
+available, maintained, compatible release; no ad hoc Derby build or JAR swap was
+made. Upstream bundle retirement/remediation must precede enabling this feature.
+
+**ZooKeeper:** the [Apache advisory](https://zookeeper.apache.org/security/#cve-2023-44981)
+affects versions before 3.7.2, 3.8.0–3.8.2 and 3.9.0. A peer capable of SASL
+authentication with a principal lacking an instance component can evade quorum
+host authorization when `quorum.auth.enableSasl=true` and access the quorum port.
+Fixed versions are 3.7.2, 3.8.3 and 3.9.1. Mere client-library use does not create
+that server-side quorum path. Spark can activate Curator/ZooKeeper through
+ZooKeeper recovery; Hadoop's shaded Curator also references quorum configuration
+classes. Neither activation is configured here. Kafka has `process.roles` set
+and an empty `zookeeper.connect`. Loading its `QuorumPeerConfig$ConfigException`
+for shared configuration validation was observed; this does not start a quorum.
+Do not extend this classification to the preserved ZooKeeper-based development
+cluster. A future quorum must use a fixed supported
+bundle; no standalone ZooKeeper JAR was substituted into Spark.
+
+**Codehaus:** [Red Hat's original report](https://bugzilla.redhat.com/show_bug.cgi?id=CVE-2019-10202)
+describes unsafe deserialization in Codehaus 1.9.x and product-specific allowlist
+backports. Those EAP/Fuse errata are not a supported replacement for Spark's
+unpatched Maven artifact. Trivy lists no fixed Maven version for 1.9.13.
+Relevant paths are `ObjectMapper` type resolution and `ClassNameIdResolver` with
+polymorphic types/default typing or type annotations, attacker-controlled type IDs
+and suitable classpath types. A mapper's presence is not proof those options are on.
+
+Repository source does not configure Codehaus ObjectMapper/default typing or
+Java-type annotations. Event JSON is parsed through Spark `from_json` with fixed
+StructTypes, not application-selected Java classes. The image class-reference
+search found typing references inside mapper libraries, not a separate enabling
+application call site; reflection, annotations and indirect initialization mean
+this is not proof of absence. Benign `@class` and `java-class` event fields were
+ignored by the real parser. The shaded Hadoop copies retain mapper and type-ID
+resolver classes; a complete shaded call graph remains outstanding. Keep the
+classification Unverified for the standalone occurrence and investigate the
+additional shaded surface rather than relying on the scanner's seven-match count.
+
+Model artifacts are Python `joblib`/pickle objects in a separate Python worker;
+there is no model-to-JVM Codehaus binding in the inspected application. They must
+still be trusted: contract metadata validation and a computed artifact hash do
+not authenticate a pickle or make arbitrary model replacement safe. Configuration
+is administrator-controlled JSON/properties, not an event-provided mapper policy.
+Do not accept untrusted models, jobs, Java serialization, configs or checkpoints
+as a workaround. A supported upstream removal/migration and deeper dependency
+review remain blockers; no vendor-specific fork was installed.
+
+### Targeted high-severity triage
+
+This is a ranked investigation queue, not a claim of confirmed exploitation or an
+assessment of every one of the 208 high occurrences. All listed libraries are
+present in runtime images; none was dismissed as build-only merely because a
+build tool also uses it.
+
+| Priority | Findings / input boundary | Evidence, current control and next action |
+| --- | --- | --- |
+| 1 | Grafana kin-openapi v0.147.0: CVE-2026-100352/100353/100354; HTTP request/schema validation | 100353 was introduced by Phase 3C. Review actual registered OpenAPI 3.1 decoder paths and plugin routes first; authentication/internal access reduces callers but does not patch parsing. Fixes listed are 0.148.0/0.149.0. Obtain a supported Grafana bundle. Exact application reachability remains Unverified. |
+| 2 | Spark shaded Jackson core 2.12.7/2.13.4: CVE-2025-52999 and other parser/type-binding matches | Event parsing is application-reachable; the old parser implementations are in shaded Hadoop/Parquet dependencies, not necessarily that event parser. Trace the selected parser and all schema/config inputs. Do not equate the reachable `from_json` API with a confirmed old-parser exploit. |
+| 3 | Prometheus Go v1.26.8: CVE-2026-78667/78669; HTTP Range/HTTP2 | Administrative HTTP APIs are enabled and protected by Basic authentication; outgoing exporter connections also exist. Inspect actual FileServer/ServeContent handlers and HTTP2 negotiation before declaring either path absent. Go fixes are 1.26.9/1.27.2; x/net fix is 0.60.0. Current application reachability is Unverified. |
+| 4 | Spark util-linux: CVE-2026-76642/78408/78409/78410 in `login` and `liblastlog2-2` (eight newly introduced occurrences) | `/usr/bin/mount` and `nsenter` actually exist. UID 185, zero effective capabilities, no-new-privileges, no host namespaces or host-system mounts constrain privilege prerequisites. Debian has no trixie fix listed; do not import unstable packages. These controls mitigate privilege escalation prerequisites, not the package defects. |
+| 5 | JLine telnet/grep in Spark/Kafka; Grafana's Tempo CVE-2026-21728/28377; Prometheus xDS/ECH-specific matches | No telnet service, interactive grep API, Tempo server/S3 SSE-C, xDS gRPC server or ECH TLS listener is configured. Lower priority for this topology; reassess service/plugin/transport changes. Binary inclusion alone does not instantiate those services. |
+
+Sources: [kin-openapi 100353 upstream advisory](https://github.com/getkin/kin-openapi/security/advisories/GHSA-vrcc-3ch7-hppw),
+[Go Range advisory](https://pkg.go.dev/vuln/GO-2026-6609),
+[Debian util-linux status](https://security-tracker.debian.org/tracker/source-package/util-linux),
+and [util-linux mount prerequisite analysis](https://github.com/util-linux/util-linux/security/advisories/GHSA-m25x-3hj9-m26f).
+The kin-openapi upstream header describes versions through v0.144.0, whereas the
+scanner reports v0.147.0 affected with a v0.149.0 fix. That discrepancy is not a
+basis for suppression; reconcile the exact decoder implementation and fix commit.
+
+### Verification scope and release implications
+
+Fresh Trivy 0.76.0 scans of the unchanged exact images reproduce Spark **6 critical /
+145 high**, Kafka **1 / 48**, Prometheus **0 / 10** and Grafana **0 / 5**: **7 / 208**
+in total. No critical occurrence was patched or removed in this investigation.
+Generated reports and probes remain ignored under `.codex-logs/phase3d/`.
+
+- Focused repository tests: `tests/hardening/test_configuration.py` and
+  `tests/reliability/test_delivery.py`: **12 passed, 0 failed, 0 skipped**.
+  Hardened Compose validation with every profile also passed.
+- One final benign Spark probe passed real application JSON parsing, fixed-schema
+  treatment of type-like fields, local stateful streaming, and resume against its
+  own new checkpoint. It used Kryo, UID 185, read-only root, zero capabilities,
+  no-new-privileges, authenticated/encrypted RPC configuration and no external
+  network. JVM class-load logging was separated from deliberate introspection;
+  class loading caused by inspection is not reported as application reachability.
+- One final disposable Kafka probe passed authenticated production/consumption,
+  unauthorized administrative ACL rejection and missing-client-certificate TLS
+  rejection. Its broker loaded JSSE transport classes and retained the Compose
+  KRaft/mTLS/default-deny authorization settings. Only fresh credentials and
+  container-local temporary storage were used; no host ports were published.
+- Preliminary probes needed a missing Kafka-envelope key and client-properties
+  mount-path correction. A denied topic describe was intentionally concealed as
+  non-existent by Kafka, so the final probe used an explicit denied ACL-list
+  operation; this was an assertion correction, not a broadened permission.
+- No runtime change required rebuild or another full ML/database/search/browser
+  suite. Phase 3C evidence above remains historical; the local Spark probe is not
+  a new distributed recovery/crash test or new full-stack compatibility claim.
+- All Docker contexts/Colima VMs available here are aarch64. Upstream Spark/Kafka
+  indexes advertise amd64 manifests, but there is no native amd64 test environment.
+  AMD64 remains **Unverified**; no expensive emulation was attempted. The stopped
+  Phase 3C VM was not started. No command targeted historical containers or retained
+  data, checkpoints, topics or offsets.
+
+Production remains blocked by incomplete Avro/Codehaus reachability analysis,
+residual critical/high packages, retired dependencies, suitable vendor bundles,
+AMD64 runtime verification and the previous capacity/operational release gates.
+A deployment/configuration change requires renewed assessment of these bounded
+classifications. No approval to release, migrate retained data or promote `main`
+is implied by this investigation.
