@@ -1,4 +1,6 @@
 import logging
+import signal
+import threading
 
 from pyspark.sql import DataFrame
 
@@ -30,6 +32,9 @@ def build_source_stream(spark, settings, topic: str, schema) -> DataFrame:
 def main() -> None:
     settings = get_settings()
     configure_logging("INFO")
+    from app.utils.checkpoints import inspect_checkpoint
+    for name in ("analytics_enriched_events", "analytics_window_metrics", "analytics_risk_metrics", "analytics_feature_engineering_v2"):
+        inspect_checkpoint(f"{settings.checkpoint_root}/{name}", stateful=name != "analytics_enriched_events")
     spark = create_spark_session(settings)
 
     logger.info(
@@ -56,52 +61,38 @@ def main() -> None:
     risk_metrics = build_risk_metrics(enriched_events, settings)
     feature_pipeline = build_feature_pipeline(login_events, api_events, network_events, anomaly_events, settings)
 
-    queries = [
-        write_json_to_kafka(
-            df=enriched_events,
-            settings=settings,
-            topic=settings.enriched_events_topic,
-            query_name="analytics_enriched_events",
-            checkpoint_name="analytics_enriched_events",
-            key_column="event_id",
-        ),
-        write_json_to_kafka(
-            df=window_metrics,
-            settings=settings,
-            topic=settings.window_metrics_topic,
-            query_name="analytics_window_metrics",
-            checkpoint_name="analytics_window_metrics",
-        ),
-        write_json_to_kafka(
-            df=risk_metrics,
-            settings=settings,
-            topic=settings.risk_metrics_topic,
-            query_name="analytics_risk_metrics",
-            checkpoint_name="analytics_risk_metrics",
-            key_column="entity_id",
-        ),
-        write_json_to_kafka(
-            df=feature_pipeline,
-            settings=settings,
-            topic=settings.feature_engineering_topic,
-            query_name="analytics_feature_engineering",
-            checkpoint_name="analytics_feature_engineering_v2",
-            key_column="entity_id",
-        ),
+    specifications = [
+        (enriched_events, settings.enriched_events_topic, "analytics_enriched_events", "analytics_enriched_events", "event_id"),
+        (window_metrics, settings.window_metrics_topic, "analytics_window_metrics", "analytics_window_metrics", None),
+        (risk_metrics, settings.risk_metrics_topic, "analytics_risk_metrics", "analytics_risk_metrics", "entity_id"),
+        (feature_pipeline, settings.feature_engineering_topic, "analytics_feature_engineering", "analytics_feature_engineering_v2", "entity_id"),
     ]
-
-    monitor = StreamingQueryMonitor(queries)
-    monitor.start()
-
+    stopping = threading.Event()
+    def request_stop(signum, frame):
+        logger.info("spark_shutdown_requested signal=%s", signum)
+        stopping.set()
+    signal.signal(signal.SIGTERM, request_stop)
+    signal.signal(signal.SIGINT, request_stop)
+    queries = []
+    monitor = None
     try:
-        spark.streams.awaitAnyTermination()
+        for frame, topic, name, checkpoint, key in specifications:
+            queries.append(write_json_to_kafka(frame, settings, topic, name, checkpoint, key))
+        monitor = StreamingQueryMonitor(queries)
+        monitor.start()
+        while not stopping.is_set():
+            if spark.streams.awaitAnyTermination(1):
+                break
     finally:
         logger.info("stopping_spark_streaming_queries")
-        monitor.stop()
-        for query in queries:
-            if query.isActive:
-                query.stop()
-        spark.stop()
+        if monitor:
+            monitor.stop()
+        try:
+            for query in queries:
+                if query.isActive:
+                    query.stop()
+        finally:
+            spark.stop()
 
 
 if __name__ == "__main__":

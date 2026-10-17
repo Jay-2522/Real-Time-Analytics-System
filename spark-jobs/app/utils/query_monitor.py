@@ -24,6 +24,9 @@ class StreamingQueryMonitor:
     def _run(self) -> None:
         while not self._stopped.wait(self._interval_seconds):
             for query in self._queries:
+                if not query.isActive:
+                    logger.error("query_inactive name=%s exception=%s", query.name, query.exception())
+                    continue
                 progress = query.lastProgress
                 if not progress:
                     logger.info("query_progress name=%s status=waiting_for_first_batch", query.name)

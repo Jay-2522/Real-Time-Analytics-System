@@ -242,10 +242,14 @@ services:
       - streaming-analytics-network
 
   spark-worker:
+    # Match the driver UID so both can create state files in the shared local volume.
+    user: "0:0"
     container_name: streaming-analytics-spark-worker
     image: apache/spark:3.5.3
     depends_on:
       - spark-master
+    volumes:
+      - spark_checkpoints:/opt/spark/checkpoints
     command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://streaming-analytics-spark-master:7077", "--cores", "2", "--memory", "2G", "--webui-port", "8081"]
     ports:
       - "127.0.0.1:8082:8081"
@@ -253,6 +257,7 @@ services:
       - streaming-analytics-network
 
   spark-streaming:
+    stop_grace_period: 90s
     container_name: streaming-analytics-spark-streaming
     build:
       context: ./spark-jobs

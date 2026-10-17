@@ -10,7 +10,7 @@ def read_kafka_topic(spark: SparkSession, settings: SparkStreamingSettings, topi
         .option("kafka.security.protocol", "PLAINTEXT")
         .option("subscribe", topic)
         .option("startingOffsets", settings.starting_offsets)
-        .option("failOnDataLoss", "false")
+        .option("failOnDataLoss", "true")
         .option("maxOffsetsPerTrigger", settings.max_offsets_per_trigger)
         .load()
     )
