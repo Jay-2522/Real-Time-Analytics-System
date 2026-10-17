@@ -1,3 +1,4 @@
+from infrastructure_runtime.security import elasticsearch_options
 from datetime import UTC, datetime
 
 from elasticsearch import Elasticsearch
@@ -41,7 +42,7 @@ class AlertQueryService:
 
     def search(self, query: str, limit: int = 25) -> list[dict]:
         try:
-            client = Elasticsearch(settings.elasticsearch_host, request_timeout=2)
+            client = Elasticsearch(settings.elasticsearch_host, request_timeout=2, **elasticsearch_options(settings.elasticsearch_host))
             if not client.ping():
                 return []
             response = client.search(

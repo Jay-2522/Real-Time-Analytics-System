@@ -3,3 +3,4 @@
 httpx==0.28.1
 # Real-browser authentication regression tests (opt-in).
 playwright==1.55.0
+pytest==9.1.1

@@ -1,11 +1,15 @@
 from __future__ import annotations
+from infrastructure_runtime.security import redis_options
+from infrastructure_runtime.security import elasticsearch_options
 
 import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlencode
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
+import base64
+from infrastructure_runtime.security import section
 
 import redis
 from elasticsearch import Elasticsearch
@@ -149,7 +153,7 @@ class MonitoringService:
 
     def _redis_status(self, checked_at: datetime) -> ServiceHealth:
         try:
-            client = redis.Redis.from_url(self._settings.redis_url, socket_connect_timeout=1, socket_timeout=1)
+            client = redis.Redis.from_url(self._settings.redis_url, socket_connect_timeout=1, socket_timeout=1, **redis_options())
             client.ping()
             return ServiceHealth(name="Redis", status="healthy", detail="Redis ping succeeded.", category="cache", endpoint="localhost:6379", last_checked=checked_at)
         except Exception as exc:
@@ -158,7 +162,7 @@ class MonitoringService:
 
     def _elasticsearch_status(self, checked_at: datetime) -> ServiceHealth:
         try:
-            client = Elasticsearch(self._settings.elasticsearch_host, request_timeout=1)
+            client = Elasticsearch(self._settings.elasticsearch_host, request_timeout=1, **elasticsearch_options(self._settings.elasticsearch_host))
             if client.ping():
                 return ServiceHealth(name="Elasticsearch", status="healthy", detail="Elasticsearch ping succeeded.", category="search", endpoint="http://localhost:9200", last_checked=checked_at)
             return ServiceHealth(name="Elasticsearch", status="degraded", detail="Elasticsearch ping returned false.", category="search", endpoint="http://localhost:9200", last_checked=checked_at)
@@ -215,7 +219,12 @@ class MonitoringService:
     def _prometheus_query(self, query: str) -> list[dict[str, Any]]:
         url = f"{self._settings.prometheus_url.rstrip('/')}/api/v1/query?{urlencode({'query': query})}"
         try:
-            with urlopen(url, timeout=1.5) as response:
+            request = Request(url)
+            credentials = section('prometheus')
+            if credentials:
+                encoded = base64.b64encode((credentials['username'] + ':' + credentials['password']).encode()).decode()
+                request.add_header('Authorization', 'Basic ' + encoded)
+            with urlopen(request, timeout=1.5) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except Exception as exc:
             logger.info("prometheus_query_unavailable query=%s error=%s", query, exc)

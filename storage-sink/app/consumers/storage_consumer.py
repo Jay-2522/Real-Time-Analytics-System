@@ -1,3 +1,4 @@
+from infrastructure_runtime.security import kafka_options
 from pipeline_runtime.durable import claim, enqueue, OutboxWorker, IdentityConflict
 from pipeline_runtime.identity import logical_key, quarantine
 from app.schemas.records import StorageRecord
@@ -59,6 +60,7 @@ class StorageSinkConsumer:
     def _create_consumer(self) -> Consumer:
         consumer = Consumer(
             {
+                **kafka_options(),
                 "bootstrap.servers": self._settings.kafka_bootstrap_servers,
                 "group.id": self._settings.kafka_consumer_group,
                 "client.id": self._settings.consumer_client_id,

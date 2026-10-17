@@ -1,3 +1,5 @@
+from infrastructure_runtime.security import redis_options
+from infrastructure_runtime.security import elasticsearch_options
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 
@@ -32,7 +34,7 @@ class AnalyticsQueryService:
 
     def search_events(self, query: str, limit: int = 25) -> list[dict]:
         try:
-            client = Elasticsearch(settings.elasticsearch_host, request_timeout=2)
+            client = Elasticsearch(settings.elasticsearch_host, request_timeout=2, **elasticsearch_options(settings.elasticsearch_host))
             if not client.ping():
                 return []
             response = client.search(
@@ -128,7 +130,7 @@ class AnalyticsQueryService:
     @staticmethod
     def _elasticsearch_health() -> SystemComponentHealth:
         try:
-            client = Elasticsearch(settings.elasticsearch_host, request_timeout=2)
+            client = Elasticsearch(settings.elasticsearch_host, request_timeout=2, **elasticsearch_options(settings.elasticsearch_host))
             if client.ping():
                 return SystemComponentHealth(name="Elasticsearch", status="online", detail="Search cluster is reachable.")
             return SystemComponentHealth(name="Elasticsearch", status="degraded", detail="Search cluster did not respond to ping.")
@@ -138,7 +140,7 @@ class AnalyticsQueryService:
     @staticmethod
     def _redis_health() -> SystemComponentHealth:
         try:
-            client = redis.from_url(settings.redis_url, socket_connect_timeout=2)
+            client = redis.from_url(settings.redis_url, socket_connect_timeout=2, **redis_options())
             client.ping()
             return SystemComponentHealth(name="Redis", status="online", detail="Cache is reachable.")
         except Exception as exc:

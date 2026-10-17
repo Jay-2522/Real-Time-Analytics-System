@@ -1,3 +1,4 @@
+from infrastructure_runtime.security import elasticsearch_options
 import logging
 
 from elasticsearch import Elasticsearch
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class AlertIndexer:
     def __init__(self, settings: AlertEngineSettings) -> None:
-        self._client = Elasticsearch(settings.elasticsearch_host, request_timeout=3)
+        self._client = Elasticsearch(settings.elasticsearch_host, request_timeout=3, **elasticsearch_options(settings.elasticsearch_host))
         self._available = False
 
     def initialize(self) -> None:

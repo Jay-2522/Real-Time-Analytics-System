@@ -1,3 +1,4 @@
+from infrastructure_runtime.security import kafka_options
 import logging
 import signal
 import time
@@ -46,6 +47,7 @@ class TelemetryProducer:
     def _create_producer(self) -> Producer:
         producer = Producer(
             {
+                **kafka_options(),
                 "bootstrap.servers": self._settings.kafka_bootstrap_servers,
                 "client.id": self._settings.producer_client_id,
                 "acks": "all",

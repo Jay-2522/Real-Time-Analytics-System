@@ -1,0 +1,518 @@
+# Standalone configuration: NEVER merge with the development Compose file.
+name: soc-hardened
+x-restricted: &restricted
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+services:
+  permissions:
+    image: alpine:3.23
+    profiles: [setup]
+    user: '0:0'
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    command: ['sh','-ec','cp /source/server.* /pg-tls/; cp /es-source/* /es-tls/; chmod 600 /es-tls/password /es-tls/server.key; chown -R 1000:0 /es-tls; chmod 600 /pg-tls/server.key; chown -R 70:70 /pg-data /pg-tls; chown -R 999:999 /redis-data; chown -R 1000:0 /es-data; chown -R 65534:65534 /prom-data; chown -R 472:472 /grafana-data; chown -R 1000:1000 /kafka-data; chown -R 185:185 /spark-state /spark-work']
+    network_mode: none
+    volumes:
+      - ${HARDENED_SECRETS_DIR:?Provision a new private hardened secrets directory}/postgres:/source:ro
+      - ${HARDENED_SECRETS_DIR:?required}/elasticsearch:/es-source:ro
+      - es_tls:/es-tls
+      - pg_tls:/pg-tls
+      - pg_data:/pg-data
+      - redis_data:/redis-data
+      - es_data:/es-data
+      - prom_data:/prom-data
+      - grafana_data:/grafana-data
+      - kafka_data:/kafka-data
+      - spark_state:/spark-state
+      - spark_work:/spark-work
+  postgres:
+    <<: *restricted
+    build:
+      context: ../..
+      dockerfile: deploy/hardened/postgres.Dockerfile
+    user: '70:70'
+    read_only: true
+    tmpfs: [/tmp, /var/run/postgresql]
+    environment:
+      POSTGRES_DB: soc
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/security/password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    command: ['postgres','-c','ssl=on','-c','ssl_cert_file=/run/pg-tls/server.crt','-c','ssl_key_file=/run/pg-tls/server.key','-c','hba_file=/run/security/pg_hba.conf','-c','password_encryption=scram-sha-256']
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - pg_tls:/run/pg-tls:ro
+      - ${HARDENED_SECRETS_DIR:?required}/postgres:/run/security:ro
+    networks: [database]
+    healthcheck:
+      test: ['CMD','pg_isready','-U','postgres','-d','soc']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    <<: *restricted
+    build:
+      context: ../..
+      dockerfile: deploy/hardened/redis.Dockerfile
+    user: '999:999'
+    read_only: true
+    command: ['redis-server','/run/tls/redis.conf']
+    volumes:
+      - redis_data:/data
+      - ${HARDENED_SECRETS_DIR:?required}/redis:/run/tls:ro
+    networks: [cache]
+  elasticsearch:
+    <<: *restricted
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.22
+    user: '1000:0'
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: 'true'
+      xpack.security.http.ssl.enabled: 'true'
+      xpack.security.http.ssl.key: tls/server.key
+      xpack.security.http.ssl.certificate: tls/server.crt
+      xpack.security.http.ssl.certificate_authorities: tls/ca.crt
+      xpack.security.transport.ssl.enabled: 'true'
+      xpack.security.transport.ssl.key: tls/server.key
+      xpack.security.transport.ssl.certificate: tls/server.crt
+      xpack.security.transport.ssl.certificate_authorities: tls/ca.crt
+      ELASTIC_PASSWORD_FILE: /usr/share/elasticsearch/config/tls/password
+      ES_JAVA_OPTS: -Xms384m -Xmx384m
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+      - es_tls:/usr/share/elasticsearch/config/tls:ro
+    networks: [search]
+  bootstrap:
+    <<: *restricted
+    profiles: [setup]
+    restart: 'no'
+    build:
+      context: ../..
+      dockerfile: deploy/hardened/backend.Dockerfile
+      target: bootstrap
+    user: '10001:10001'
+    read_only: true
+    volumes:
+      - ${HARDENED_SECRETS_DIR:?required}/admin:/run/admin:ro
+    networks: [database, search]
+  backend:
+    <<: *restricted
+    build:
+      context: ../..
+      dockerfile: deploy/hardened/backend.Dockerfile
+      target: runtime
+    user: '10001:10001'
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      ENVIRONMENT: production
+      AUTH_LOCAL_HTTP: 'false'
+      BACKEND_CORS_ORIGINS: https://localhost:8443
+      SERVICE_SECURITY_FILE: /run/security/security.json
+      METRICS_TOKEN_FILE: /run/security/metrics-token
+      ELASTICSEARCH_HOST: https://elasticsearch:9200
+      REDIS_URL: rediss://redis:6379/0
+      PROMETHEUS_URL: http://prometheus:9090
+    volumes:
+      - ${HARDENED_SECRETS_DIR:?required}/backend:/run/security:ro
+    networks:
+      web:
+        ipv4_address: 172.29.250.3
+      database: {}
+      cache: {}
+      search: {}
+      monitoring: {}
+    healthcheck:
+      test: ['CMD','python','-c',"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/ready', timeout=5)"]
+      interval: 15s
+      timeout: 6s
+      retries: 3
+  web:
+    <<: *restricted
+    build:
+      context: ../..
+      dockerfile: deploy/hardened/web.Dockerfile
+    user: '101:101'
+    read_only: true
+    tmpfs: [/tmp]
+    ports: ['127.0.0.1:8443:8443']
+    volumes:
+      - ${HARDENED_SECRETS_DIR:?required}/web:/run/tls:ro
+    networks:
+      edge: {}
+      web:
+        ipv4_address: 172.29.250.2
+    healthcheck:
+      test: ['CMD','curl','--fail','--silent','--cacert','/run/tls/ca.crt','https://localhost:8443/api/v1/health/live']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+  prometheus:
+    <<: *restricted
+    image: prom/prometheus:v2.55.1
+    user: '65534:65534'
+    read_only: true
+    command: ['--config.file=/etc/prometheus/prometheus.yml','--web.config.file=/run/security/web.yml','--storage.tsdb.retention.time=7d']
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${HARDENED_SECRETS_DIR:?required}/prometheus:/run/security:ro
+      - prom_data:/prometheus
+    networks: [monitoring]
+  grafana:
+    <<: *restricted
+    image: grafana/grafana:11.6.16
+    user: '472:472'
+    read_only: true
+    tmpfs: [/tmp]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/security/password
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_SECURITY_COOKIE_SECURE: 'true'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_PLUGINS_PREINSTALL_DISABLED: 'true'
+    volumes:
+      - ${HARDENED_SECRETS_DIR:?required}/grafana:/run/security:ro
+      - grafana_data:/var/lib/grafana
+      - ${HARDENED_SECRETS_DIR:?required}/grafana/datasource.yml:/etc/grafana/provisioning/datasources/soc.yml:ro
+    networks: [monitoring]
+  kafka:
+    <<: *restricted
+    profiles: [streaming]
+    image: confluentinc/cp-kafka:7.6.14
+    user: '1000:1000'
+    command: ['bash','-ec','export CLUSTER_ID=$$(cat /etc/kafka/secrets/cluster-id); exec /etc/confluent/docker/run']
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: SSL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: SSL://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: SSL:SSL,CONTROLLER:SSL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: SSL
+      KAFKA_SSL_CLIENT_AUTH: required
+      KAFKA_SSL_KEYSTORE_TYPE: PKCS12
+      KAFKA_SSL_TRUSTSTORE_TYPE: PKCS12
+      KAFKA_SSL_KEYSTORE_FILENAME: server.p12
+      KAFKA_SSL_KEYSTORE_CREDENTIALS: store-password
+      KAFKA_SSL_KEY_CREDENTIALS: store-password
+      KAFKA_SSL_TRUSTSTORE_FILENAME: truststore.p12
+      KAFKA_SSL_TRUSTSTORE_CREDENTIALS: store-password
+      KAFKA_AUTHORIZER_CLASS_NAME: org.apache.kafka.metadata.authorizer.StandardAuthorizer
+      KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: 'false'
+      KAFKA_SUPER_USERS: User:CN=kafka;User:CN=kafka-admin
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx384m
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+      - ${HARDENED_SECRETS_DIR:?required}/kafka:/etc/kafka/secrets:ro
+    networks: [messaging]
+  kafka-init:
+    <<: *restricted
+    profiles: [setup]
+    restart: 'no'
+    image: confluentinc/cp-kafka:7.6.14
+    user: '1000:1000'
+    read_only: true
+    tmpfs: [/tmp]
+    entrypoint: ['bash','/setup/kafka-init.sh']
+    volumes:
+      - ./kafka-init.sh:/setup/kafka-init.sh:ro
+      - ${HARDENED_SECRETS_DIR:?required}/kafka-admin:/run/security:ro
+    networks: [messaging]
+  spark-master:
+    <<: *restricted
+    profiles: [streaming]
+    image: soc-hardened-spark
+    build:
+      context: ../..
+      dockerfile: deploy/hardened/spark.Dockerfile
+    user: '185:185'
+    read_only: true
+    tmpfs: ['/tmp:rw,nosuid,nodev,exec,mode=1777,size=512m']
+    command: ['/opt/spark/bin/spark-class','org.apache.spark.deploy.master.Master','--host','spark-master','--port','7077']
+    volumes:
+      - ${HARDENED_SECRETS_DIR:?required}/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+    networks: [compute]
+  spark-worker:
+    <<: *restricted
+    profiles: [streaming]
+    image: soc-hardened-spark
+    user: '185:185'
+    read_only: true
+    tmpfs: ['/tmp:rw,nosuid,nodev,exec,mode=1777,size=512m']
+    command: ['/opt/spark/bin/spark-class','org.apache.spark.deploy.worker.Worker','spark://spark-master:7077','--cores','1','--memory','768M','--work-dir','/opt/spark/work']
+    volumes:
+      - ${HARDENED_SECRETS_DIR:?required}/spark:/run/security:ro
+      - spark_work:/opt/spark/work
+      - spark_state:/opt/spark/checkpoints
+      - ${HARDENED_SECRETS_DIR:?required}/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+    networks: [compute, messaging]
+  spark-driver:
+    <<: *restricted
+    profiles: [streaming]
+    image: soc-hardened-spark
+    user: '185:185'
+    read_only: true
+    tmpfs: ['/tmp:rw,nosuid,nodev,exec,mode=1777,size=512m']
+    environment:
+      ENVIRONMENT: production
+      SERVICE_SECURITY_FILE: /run/security/security.json
+      SPARK_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPARK_CHECKPOINT_ROOT: /opt/spark/checkpoints
+    volumes:
+      - spark_state:/opt/spark/checkpoints
+      - ${HARDENED_SECRETS_DIR:?required}/spark:/run/security:ro
+      - ${HARDENED_SECRETS_DIR:?required}/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
+    networks: [compute, messaging]
+
+  telemetry-producer:
+    profiles:
+    - workers
+    build:
+      context: ../..
+      dockerfile: deploy/hardened/worker.Dockerfile
+      target: runtime
+      args:
+        SERVICE: kafka-producers
+    user: 10001:10001
+    read_only: true
+    tmpfs:
+    - /tmp
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      SERVICE_SECURITY_FILE: /run/security/security.json
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    command:
+    - python
+    - -m
+    - app.main
+    - producer
+    volumes:
+    - ${HARDENED_SECRETS_DIR:?required}/producer:/run/security:ro
+    networks:
+    - messaging
+    - monitoring
+  telemetry-consumer:
+    profiles:
+    - workers
+    build:
+      context: ../..
+      dockerfile: deploy/hardened/worker.Dockerfile
+      target: runtime
+      args:
+        SERVICE: kafka-producers
+    user: 10001:10001
+    read_only: true
+    tmpfs:
+    - /tmp
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      SERVICE_SECURITY_FILE: /run/security/security.json
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_CONSUMER_GROUP: consumer-hardened
+    command:
+    - python
+    - -m
+    - app.main
+    - consumer
+    volumes:
+    - ${HARDENED_SECRETS_DIR:?required}/consumer:/run/security:ro
+    networks:
+    - messaging
+    - monitoring
+  ml-inference:
+    profiles:
+    - workers
+    build:
+      context: ../..
+      dockerfile: deploy/hardened/worker.Dockerfile
+      target: runtime
+      args:
+        SERVICE: ml-models
+    user: 10001:10001
+    read_only: true
+    tmpfs:
+    - /tmp
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      SERVICE_SECURITY_FILE: /run/security/security.json
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      ML_CONSUMER_GROUP: ml-hardened
+      ML_ARTIFACT_DIR: /app/artifacts
+      ML_AUTO_BOOTSTRAP_MODEL: 'false'
+    command:
+    - python
+    - -m
+    - app.main
+    - inference
+    volumes:
+    - ${HARDENED_SECRETS_DIR:?required}/ml:/run/security:ro
+    - ${HARDENED_MODEL_DIR:?Supply verified contract-v2 models}:/app/artifacts:ro
+    networks:
+    - messaging
+    - monitoring
+  storage-sink:
+    profiles:
+    - workers
+    build:
+      context: ../..
+      dockerfile: deploy/hardened/worker.Dockerfile
+      target: runtime
+      args:
+        SERVICE: storage-sink
+    user: 10001:10001
+    read_only: true
+    tmpfs:
+    - /tmp
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      SERVICE_SECURITY_FILE: /run/security/security.json
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      STORAGE_SINK_CONSUMER_GROUP: storage-hardened
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: soc
+      REDIS_HOST: redis
+      ELASTICSEARCH_HOST: https://elasticsearch:9200
+    command:
+    - python
+    - -m
+    - app.main
+    volumes:
+    - ${HARDENED_SECRETS_DIR:?required}/storage:/run/security:ro
+    networks:
+    - messaging
+    - monitoring
+    - database
+    - cache
+    - search
+  alert-engine:
+    profiles:
+    - workers
+    build:
+      context: ../..
+      dockerfile: deploy/hardened/worker.Dockerfile
+      target: runtime
+      args:
+        SERVICE: alert-engine
+    user: 10001:10001
+    read_only: true
+    tmpfs:
+    - /tmp
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      SERVICE_SECURITY_FILE: /run/security/security.json
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      ALERT_ENGINE_CONSUMER_GROUP: alerts-hardened
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: soc
+      REDIS_HOST: redis
+      ELASTICSEARCH_HOST: https://elasticsearch:9200
+    command:
+    - python
+    - -m
+    - app.main
+    volumes:
+    - ${HARDENED_SECRETS_DIR:?required}/alerts:/run/security:ro
+    networks:
+    - messaging
+    - monitoring
+    - database
+    - cache
+    - search
+  threat-intelligence-engine:
+    profiles:
+    - workers
+    build:
+      context: ../..
+      dockerfile: deploy/hardened/worker.Dockerfile
+      target: threat
+      args:
+        SERVICE: threat-intelligence-engine
+    user: 10001:10001
+    read_only: true
+    tmpfs:
+    - /tmp
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      SERVICE_SECURITY_FILE: /run/security/security.json
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      THREAT_INTEL_CONSUMER_GROUP: threat-hardened
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: soc
+      REDIS_HOST: redis
+      ELASTICSEARCH_HOST: https://elasticsearch:9200
+    command:
+    - python
+    - -m
+    - app.main
+    volumes:
+    - ${HARDENED_SECRETS_DIR:?required}/threat:/run/security:ro
+    networks:
+    - messaging
+    - monitoring
+    - database
+    - cache
+    - search
+
+networks:
+  edge: {}
+  web:
+    internal: true
+    ipam:
+      config: [{subnet: 172.29.250.0/28}]
+  database: {internal: true}
+  cache: {internal: true}
+  search: {internal: true}
+  monitoring: {internal: true}
+  messaging: {internal: true}
+  compute: {internal: true}
+volumes:
+  pg_tls:
+  es_tls:
+  pg_data:
+  redis_data:
+  es_data:
+  prom_data:
+  grafana_data:
+  kafka_data:
+  spark_state:
+  spark_work:

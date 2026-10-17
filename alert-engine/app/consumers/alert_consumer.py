@@ -1,3 +1,4 @@
+from infrastructure_runtime.security import kafka_options
 from pipeline_runtime.durable import OutboxWorker, quarantine_record, IdentityConflict
 from pipeline_runtime.identity import quarantine
 from app.schemas.alerts import AlertEvent
@@ -47,6 +48,7 @@ class AlertEngineConsumer:
     def _create_consumer(self) -> Consumer:
         consumer = Consumer(
             {
+                **kafka_options(),
                 "bootstrap.servers": self._settings.kafka_bootstrap_servers,
                 "group.id": self._settings.consumer_group,
                 "client.id": "streaming-analytics-alert-engine",

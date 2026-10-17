@@ -12,5 +12,6 @@ RUN pip install --upgrade pip \
 COPY alert-engine/app ./app
 COPY pipeline_runtime ./pipeline_runtime
 
-CMD ["python", "-m", "app.main"]
+COPY infrastructure_runtime /app/infrastructure_runtime
 
+CMD ["python", "-m", "app.main"]

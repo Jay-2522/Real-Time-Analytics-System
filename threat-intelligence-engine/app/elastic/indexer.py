@@ -1,3 +1,4 @@
+from infrastructure_runtime.security import elasticsearch_options
 import logging
 
 from elasticsearch import Elasticsearch
@@ -9,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class ThreatIndexer:
     def __init__(self, host: str) -> None:
-        self._client = Elasticsearch(host, request_timeout=2)
+        self._client = Elasticsearch(host, request_timeout=2, **elasticsearch_options(host))
         self._available = False
         try:
             self._available = bool(self._client.ping())

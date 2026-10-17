@@ -69,6 +69,7 @@ def test_real_crash_replay_and_continuation(tmp_path):
     first=seed(0)
     def run(label, crash=False):
         command=['docker','run','--rm','--user','root','--network','streaming-analytics-network',
+                 '-v',str(ROOT/'infrastructure_runtime')+':/opt/spark/jobs/infrastructure_runtime:ro',
                  '-v',str(ROOT/'spark-jobs/app')+':/opt/spark/jobs/app:ro',
                  '-v',str(ROOT/'tests/spark_recovery')+':/tests:ro',
                  '-v',str(checkpoint)+':/checkpoint',

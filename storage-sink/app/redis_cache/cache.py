@@ -1,3 +1,4 @@
+from infrastructure_runtime.security import hardened, redis_options
 import logging
 
 import redis
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class RedisCache:
     def __init__(self, settings: StorageSinkSettings) -> None:
-        self._client = redis.Redis(host=settings.redis_host, port=settings.redis_port, decode_responses=True, socket_connect_timeout=3, socket_timeout=3)
+        self._client = redis.Redis(host=settings.redis_host, port=settings.redis_port, decode_responses=True, socket_connect_timeout=3, socket_timeout=3, ssl=hardened(), **redis_options())
         self._available = False
 
     def initialize(self) -> None:

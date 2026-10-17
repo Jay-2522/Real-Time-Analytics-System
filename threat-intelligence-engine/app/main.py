@@ -1,3 +1,4 @@
+from infrastructure_runtime.security import redis_options
 import logging
 
 import redis
@@ -22,7 +23,7 @@ def main() -> None:
     logger.info("threat_metrics_started port=%s", settings.metrics_port)
     initialize_database()
     try:
-        redis_client = redis.Redis.from_url(settings.redis_url, socket_connect_timeout=1, socket_timeout=1)
+        redis_client = redis.Redis.from_url(settings.redis_url, socket_connect_timeout=1, socket_timeout=1, **redis_options())
         redis_client.ping()
     except Exception:
         redis_client = None

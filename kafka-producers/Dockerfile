@@ -6,10 +6,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY kafka-producers/requirements.txt .
 RUN pip install --upgrade pip \
     && pip install -r requirements.txt
 
-COPY app ./app
+COPY kafka-producers/app ./app
 
 CMD ["python", "-m", "app.main", "producer"]
+
+COPY infrastructure_runtime /app/infrastructure_runtime

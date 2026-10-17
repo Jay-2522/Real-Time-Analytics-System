@@ -12,3 +12,8 @@
 .codex-logs
 .docker
 screenshots
+
+.secrets
+**/.secrets
+**/*.key
+**/*.p12

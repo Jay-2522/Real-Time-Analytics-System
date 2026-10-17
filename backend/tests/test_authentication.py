@@ -72,7 +72,7 @@ def test_all_routes_deny_anonymous_and_policy_is_explicit(auth):
     app, client, *_ = auth
     for route in app.routes:
         for method in getattr(route, 'methods', set()) - {'HEAD', 'OPTIONS'}:
-            if route.path in ('/api/v1/health', '/api/v1/auth/login', '/metrics'): continue
+            if route.path in ('/api/v1/health', '/api/v1/health/live', '/api/v1/health/ready', '/api/v1/auth/login', '/metrics'): continue
             path = route.path.replace('{entity_id}', 'fixture').replace('{incident_id}', 'fixture').replace('{alert_id}', 'fixture').replace('{rule_id}', 'fixture').replace('{user_id}', 'fixture')
             assert client.request(method, path).status_code == 401, (method, path)
             assert permission(path, method, '/api/v1') is not None, (method, path)
@@ -188,7 +188,7 @@ def test_production_cookie_and_config_defaults(auth):
     from app.core.settings import Settings, settings
     from pydantic import ValidationError
     assert Settings(_env_file=None, auth_local_http=False).session_cookie == '__Host-soc_session'
-    with pytest.raises(ValidationError): Settings(_env_file=None, environment='production', auth_local_http=True)
+    with pytest.raises(RuntimeError, match='Production requires'): Settings(_env_file=None, environment='production', auth_local_http=True)
     with pytest.raises(ValidationError): Settings(_env_file=None, BACKEND_CORS_ORIGINS='*')
     settings.auth_local_http = False
     _, client, _, password, _ = auth

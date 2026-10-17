@@ -58,7 +58,7 @@ class AccessControlMiddleware:
             if method != 'GET' or len(expected) < 32 or not secrets.compare_digest(connection.headers.get('authorization','').encode(), ('Bearer ' + expected).encode()):
                 return await deny(401, 'Service authentication required')
             return await self.app(scope, receive, send)
-        if method == 'GET' and path == settings.api_v1_prefix + '/health':
+        if method == 'GET' and path in {settings.api_v1_prefix + p for p in ('/health', '/health/live', '/health/ready')}:
             return await self.app(scope, receive, send)
         if method == 'POST' and path == settings.api_v1_prefix + '/auth/login':
             if origin not in settings.cors_origins or connection.headers.get('x-requested-with') != 'SOC':

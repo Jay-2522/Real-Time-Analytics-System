@@ -1,3 +1,4 @@
+from infrastructure_runtime.security import database_url as secured_database_url
 from functools import lru_cache
 
 from pydantic import Field, field_validator
@@ -34,10 +35,7 @@ class StorageSinkSettings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        return (
-            f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
-            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-        )
+        return secured_database_url(f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}")
 
 
 @lru_cache

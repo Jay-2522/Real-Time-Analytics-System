@@ -1,4 +1,5 @@
 from __future__ import annotations
+from infrastructure_runtime.security import kafka_options
 
 from pipeline_runtime.kafka import CONSUMER_OPTIONS, DeliveryLoop
 from pipeline_runtime.identity import coordinate, logical_key, stable_uuid, quarantine
@@ -55,6 +56,7 @@ class MLInferenceConsumer:
     def _create_consumer(self) -> Consumer:
         consumer = Consumer(
             {
+                **kafka_options(),
                 "bootstrap.servers": self._settings.kafka_bootstrap_servers,
                 "group.id": self._settings.kafka_consumer_group,
                 "client.id": self._settings.consumer_client_id,
@@ -69,6 +71,7 @@ class MLInferenceConsumer:
     def _create_producer(self) -> Producer:
         producer = Producer(
             {
+                **kafka_options(),
                 "bootstrap.servers": self._settings.kafka_bootstrap_servers,
                 "client.id": self._settings.producer_client_id,
                 "acks": "all",

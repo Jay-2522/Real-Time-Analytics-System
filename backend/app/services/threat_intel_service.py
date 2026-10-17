@@ -1,4 +1,5 @@
 from __future__ import annotations
+from infrastructure_runtime.security import elasticsearch_options
 
 from datetime import UTC, datetime
 from typing import Any
@@ -106,7 +107,7 @@ class ThreatIntelQueryService:
 
     def search(self, query: str, limit: int = 50) -> list[dict[str, Any]]:
         try:
-            client = Elasticsearch(settings.elasticsearch_host, request_timeout=2)
+            client = Elasticsearch(settings.elasticsearch_host, request_timeout=2, **elasticsearch_options(settings.elasticsearch_host))
             if not client.ping():
                 return []
             response = client.search(index="threat-intel-events,ioc-matches,entity-profiles,detection-rule-hits,attack-timelines", size=limit, query={"query_string": {"query": query, "default_field": "*"}})

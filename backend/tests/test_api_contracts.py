@@ -33,7 +33,7 @@ def test_health_endpoint_and_security_headers(tmp_path):
     with TestClient(app) as client:
         response = client.get("/api/v1/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "healthy"
+    assert response.json()["status"] == "alive"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.headers["X-Frame-Options"] == "DENY"
 

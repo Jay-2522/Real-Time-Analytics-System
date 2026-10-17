@@ -1,3 +1,4 @@
+from infrastructure_runtime.security import kafka_options
 import json
 import logging
 import signal
@@ -52,6 +53,7 @@ class TelemetryConsumer:
     def _create_consumer(self) -> Consumer:
         consumer = Consumer(
             {
+                **kafka_options(),
                 "bootstrap.servers": self._settings.kafka_bootstrap_servers,
                 "group.id": self._settings.kafka_consumer_group,
                 "client.id": self._settings.consumer_client_id,
@@ -66,6 +68,7 @@ class TelemetryConsumer:
     def _create_deadletter_producer(self) -> Producer:
         producer = Producer(
             {
+                **kafka_options(),
                 "bootstrap.servers": self._settings.kafka_bootstrap_servers,
                 "client.id": f"{self._settings.consumer_client_id}-deadletter",
                 "acks": "all",

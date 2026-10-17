@@ -12,4 +12,6 @@ RUN pip install --upgrade pip \
 COPY threat-intelligence-engine/app ./app
 COPY detections/rules ./rules
 
+COPY infrastructure_runtime /app/infrastructure_runtime
+
 CMD ["python", "-m", "app.main"]

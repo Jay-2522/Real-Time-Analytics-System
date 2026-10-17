@@ -181,7 +181,7 @@ def test_real_ml_delivery_duplicate_identity_and_dlq(db):
         ML_PREDICTION_TOPIC=output, deadletter_topic=output)
     artifacts=m.load_artifacts(settings.artifact_dir)
     inference=m.MLInferenceConsumer(settings,m.AnomalyPredictor(settings,artifacts))
-    inference._producer=Producer({'bootstrap.servers':'localhost:9092','delivery.timeout.ms':5000})
+    inference._producer=Producer({'bootstrap.servers':'127.0.0.1:9092','broker.address.family':'v4','delivery.timeout.ms':5000})
     input_topic='test-features-'+uuid.uuid4().hex
     wire=json.dumps(p).encode()
     inference._handle_message(input_topic,wire)

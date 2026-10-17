@@ -1,3 +1,4 @@
+from infrastructure_runtime.security import kafka_java_options
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.streaming import StreamingQuery
@@ -27,7 +28,7 @@ def write_json_to_kafka(
     return (
         serializable_df.writeStream.format("kafka")
         .option("kafka.bootstrap.servers", settings.kafka_bootstrap_servers)
-        .option("kafka.security.protocol", "PLAINTEXT")
+        .options(**kafka_java_options())
         .option("topic", topic)
         .option("checkpointLocation", f"{settings.checkpoint_root}/{checkpoint_name}")
         .queryName(query_name)

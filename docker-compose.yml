@@ -147,8 +147,8 @@ services:
   backend:
     container_name: streaming-analytics-backend
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     env_file:
       - ./.env
     environment:
@@ -195,8 +195,8 @@ services:
   telemetry-producer:
     container_name: streaming-analytics-producer
     build:
-      context: ./kafka-producers
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: kafka-producers/Dockerfile
     env_file:
       - ./.env
     environment:
@@ -217,8 +217,8 @@ services:
   telemetry-consumer:
     container_name: streaming-analytics-consumer
     build:
-      context: ./kafka-producers
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: kafka-producers/Dockerfile
     env_file:
       - ./.env
     environment:
@@ -264,8 +264,8 @@ services:
     stop_grace_period: 90s
     container_name: streaming-analytics-spark-streaming
     build:
-      context: ./spark-jobs
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: spark-jobs/Dockerfile
     env_file:
       - ./.env
     environment:

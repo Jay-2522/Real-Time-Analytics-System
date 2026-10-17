@@ -17,5 +17,6 @@ COPY ml-models/app ./app
 COPY pipeline_runtime ./pipeline_runtime
 RUN mkdir -p /app/artifacts
 
-CMD ["python", "-m", "app.main", "inference"]
+COPY infrastructure_runtime /app/infrastructure_runtime
 
+CMD ["python", "-m", "app.main", "inference"]

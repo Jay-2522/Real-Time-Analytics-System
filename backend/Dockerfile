@@ -10,11 +10,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --upgrade pip \
     && pip install -r requirements.txt
 
-COPY app ./app
+COPY backend/app ./app
+COPY infrastructure_runtime ./infrastructure_runtime
 
 EXPOSE 8000
 

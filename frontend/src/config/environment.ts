@@ -6,7 +6,7 @@ function dashboardWebSocketUrl() {
     return configured.endsWith("/ws/dashboard") ? configured : `${configured.replace(/\/$/, "")}/ws/dashboard`;
   }
 
-  const url = new URL(apiBaseUrl);
+  const url = new URL(apiBaseUrl, window.location.origin);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.pathname = `${url.pathname.replace(/\/$/, "")}/ws/dashboard`;
   url.search = "";
