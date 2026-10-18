@@ -699,3 +699,203 @@ credential provisioning, three new focused regression files, the existing ACL
 probe fixture, and the three recovery/delivery/security runbooks. Generated logs,
 scan results, datasets, certificates/credentials, scratch SQLite files, AOF/volumes,
 checkpoint evidence and temporary orchestration/build scripts remain ignored.
+
+
+## Phase 4C legacy-state reconstruction preflight (18 October 2026)
+
+**Outcome: CONDITIONAL PASS for the authorized metadata-only scope.** The
+preservation, retention and isolation preflight is complete, but ownership of the
+original business namespaces remains unknown. No historical payload was replayed,
+no shadow stack was started and no cutover was performed. Fresh-state recovery
+results above are not evidence of legacy reconstruction.
+
+### Preservation and environment inventory
+
+The Git checkout was clean at baseline `74c3ac0596e0a375685775b916c6842c48632cdb`
+on `dev`, tracking `origin/dev`; local `main` remained
+`055399ab90c1f07315188bdd31d5ffaa118b815f`. Three Colima profiles exist:
+`phase0-analytics` is running, `phase3c-security` is stopped, and
+`phase4a-recovery` is running with all retained `soc-phase4a*` test projects
+stopped. The original `streaming_analytics_system` project is still live on
+`phase0-analytics`; its producer and data services continue to advance. Its Spark
+driver `streaming-analytics-spark-streaming` remains exited, while the original
+worker is running with its container-local historical state. The separate
+`soc-hardened` project is stopped. Phase 4A/4B projects, volumes and credentials
+remain separate from both original projects.
+
+The driver and worker archives were streamed without extraction and checked
+against every manifest row. The driver archive matched **1,886/1,886 files** and
+the worker archive matched **15,208/15,208 files**, with zero missing, extra,
+size-changed or hash-changed files. Their archive hashes remain:
+
+- driver: `a4c08f4741f42b22a22cca57a62e61b52184c2376c175d6583afbb6493053578`
+- worker: `809332d463f44f1b93bd26505f61a1d094e3a6ced29deb7f5d1820c886ab461e`
+
+No original checkpoint, Docker volume, topic, consumer group, database, index,
+Redis file, container lifecycle state or offset was changed by this phase.
+
+### Ownership and historical inventory
+
+The isolated `spark-recovery-*`, `reliability-*` and `soc-phase4a*` fixtures are
+confirmed synthetic. Generator code and test artifacts prove that synthetic data
+also exists in the original business namespaces, but do not prove that every row
+is synthetic. There is no evidence-backed set of confirmed non-synthetic records.
+Consequently all records in the original `telemetry.*`, `analytics.*` and
+`ml.anomaly.predictions` topics, original PostgreSQL business tables,
+Elasticsearch business indexes, Redis keys, alerts/incidents and threat records
+are **unknown provenance**. No source payload or potentially sensitive ledger was
+exported. Replay requires owner authorization and a declared interval.
+
+At the read-only 2026-10-18 04:01:59 UTC SQL snapshot, exact relevant row counts
+were: telemetry 270,536; analytics metrics 14,330; risk metrics 26,710; feature
+snapshots 19,521; predictions 47,452; alerts 10,942; incidents 5,500; threat-intel
+events 259,779; IOC matches 20; dead letters 16; receipts 389,318; and outbox rows
+512,016. The outbox split was `elasticsearch` 255,996 done / 4 pending, legacy
+`es` 8 done, and Redis 256,004 done / 4 pending. Counts establish inventory only;
+they do not establish identity or semantic equality.
+
+At 04:02:00 UTC Elasticsearch reported: telemetry 270,475; analytics-events
+60,561; ML predictions 47,452; alerts 10,942; incidents 0; threat-intel events
+259,721; IOC matches 20; attack timelines 259,721; detection-rule hits 27,682;
+entity profiles 259,721; and dead letters 16. The original producer and consumers
+were active across these separate observations. Differences such as SQL incidents
+5,500 versus search incidents 0 are confirmed inventory differences; moving
+telemetry/threat totals cannot be labeled loss or duplication without one approved
+offset/time boundary. Matching totals likewise do not prove matching records.
+
+### Current Kafka retention and Spark boundaries
+
+Read-only broker metadata at 2026-10-18 04:01:19 UTC showed `cleanup.policy=delete`,
+`retention.ms=604800000` (seven days), `retention.bytes=-1` and
+`segment.ms=604800000` for every business source/output topic. All 11 source
+partitions still retained offset zero. High watermarks, expressed as exclusive
+offsets in partition order, were:
+
+| Topic | Partitions | Retained range |
+| --- | ---: | --- |
+| `telemetry.login.events` | 3 | `[0,28852)`, `[0,28299)`, `[0,28748)` |
+| `telemetry.api.events` | 3 | `[0,28379)`, `[0,28662)`, `[0,28592)` |
+| `telemetry.network.events` | 3 | `[0,28412)`, `[0,28459)`, `[0,28453)` |
+| `telemetry.anomaly.events` | 2 | `[0,6660)`, `[0,6791)` |
+
+Metadata-only reads of the first and then-current last records placed retained
+source timestamps between 2026-10-16 22:31:45.863 UTC and at least
+2026-10-18 04:00:04.158 UTC. High watermarks continued advancing during the
+inspection. A future replay must take a new atomic-enough inventory and freeze an
+approved end boundary; these values are evidence for this preflight only.
+
+The three original contract-predecessor query starts, in partition order, are
+login `[34,25,32]`, API `[27,36,48]`, network `[28,28,39]`, and anomaly `[2,7]`.
+The feature-v2 starts are login `[1075,1073,1093]`, API `[1124,1093,1152]`,
+network `[1080,1078,1065]`, and anomaly `[270,264]`. No required starting offset
+has expired. From these starts to the 04:01:19 high watermarks, 270,001 source
+records are available to each older query and 259,940 are available to feature-v2.
+These are replay-available records, not proven reconstructible outputs.
+
+The last provably complete batch and its source next-offsets are:
+
+| Query | Complete batch | Login | API | Network | Anomaly |
+| --- | ---: | --- | --- | --- | --- |
+| enriched | 180 | `[1520,1507,1527]` | `[1551,1503,1555]` | `[1511,1505,1484]` | `[394,370]` |
+| window | 179 | `[1512,1505,1521]` | `[1545,1497,1548]` | `[1498,1491,1478]` | `[390,367]` |
+| risk | 181 | `[1520,1507,1527]` | `[1551,1503,1555]` | `[1511,1505,1484]` | `[394,370]` |
+| feature-v2 | 52 | `[1512,1505,1521]` | `[1545,1497,1548]` | `[1498,1491,1478]` | `[390,367]` |
+
+The respective query UUIDs remain those recorded above. Empty progress tails are
+enriched offsets/commits 181-182; window offsets 181-182 and commits 180-182;
+risk offsets/commits 182-183; and feature-v2 offsets 54-55 plus commits 53-54.
+Window state has one empty delta in each of six partitions at version 183; risk
+has one in each partition at version 184. Feature-v2 has nonempty state through
+version 55. The retained state schemas match current isolated schemas, but the
+complete historical state-version chain has not been decoded by Spark. Only the
+last roughly 100 progress entries remain for the older queries, so earlier
+micro-batch and watermark decisions are absent. Exact continuation and exact
+watermark-dependent reproduction remain unsupported.
+
+Original output topics remain `[0,4821/4679/4794)` enriched (**14,294 records**),
+`[0,16/20)` window (**36**), `[0,13438/13272)` risk (**26,710**),
+`[0,9495/10027)` features (**19,522**) and `[0,15779/15855/15787)` predictions
+(**47,421**). Preserved evidence shows publication overlapping the incomplete
+tail. Which tail records escaped cannot be proved solely from empty commit names.
+Legacy random prediction IDs, overlapping window identities, pre-contract-2.0
+features and processing/watermark differences prevent count-only comparison.
+
+### Reconstruction outcome and discrepancy boundary
+
+For the unknown-provenance historical scope: **0 records are fully reconciled**,
+**0 are proven reconstructible but not replayed**, **0 are proven partially
+reconstructible**, and **0 are proven lost by Kafka retention**. The 270,001 and
+259,940 source-record intervals above are available but remain **unknown/blocked
+by ownership authorization and schema/semantic validation**. Exact original state
+for the incomplete Spark tail is unrecoverable with the present progress and
+watermark evidence; the number of affected logical outputs is unknown. No vague
+completeness percentage is assigned.
+
+The reusable reconciliation helper records identities, expected/observed behavior
+and semantic digests without copying payloads. It distinguishes duplicate IDs,
+overlapping windows, feature-contract mismatches, legacy prediction-ID drift,
+partial retention, SQL/search differences, absent Redis expiry and incomplete
+outbox coverage. The ledger for a future approved replay must remain local and
+excluded from Git when it contains historical identities.
+
+### Redis legacy compatibility
+
+The original server is Redis 7.4.11 with AOF enabled. At 04:02 UTC it reported
+422,888 keys, of which 80,754 had expirations, and a 54,970,986-byte base RDB plus
+an approximately 25.8 MiB incremental AOF. Aggregate expiry counts do not recover
+individual absolute TTLs. The Phase 4B disposable fixture proved that a 7.4.11 AOF
+copy can load under the fixed 8.4.7 runtime and that modern effects with complete
+SQL ledgers can be reconciled. It did not test the original Redis files.
+
+The original volume was not copied or mounted because data ownership authorization
+is absent. Its exact AOF compatibility is therefore **blocked**, and completed
+outbox counts do not prove all legacy cache effects or TTLs are reconstructible.
+Stable modern marker identities may be rebuilt only where the retained SQL/outbox
+ledger proves them. Unknown TTL projections must be invalidated at an approved
+boundary; missing expirations, pre-ledger counters and arrival order must never be
+invented. PostgreSQL remains authoritative.
+
+### Proposed shadow reconstruction, cutover and rollback
+
+An approved replay must use a new Compose project, consumer groups, output topics,
+checkpoint root, PostgreSQL database/schema, Elasticsearch index prefix, Redis
+volume and credential set. The recovery preflight rejects any overlap. Source
+access should use a read-only principal where Kafka policy permits it; no original
+consumer identity or sink is reused. The current hardened TLS, ACL, RBAC and
+authentication controls remain mandatory.
+
+The unexecuted procedure is:
+
+1. Obtain owner attestation for the exact topics, offset interval and downstream
+   records; classify sensitive and disposable synthetic data explicitly.
+2. Record a new per-partition retention/configuration/timestamp inventory and an
+   exact end boundary without resetting or draining anything outside an approved
+   maintenance plan.
+3. Back up and hash Kafka configuration, both Spark filesystems, PostgreSQL,
+   Elasticsearch and Redis AOF/RDB/manifest, retaining matching image digests.
+4. Validate a copy of legacy Redis under 8.4.7 and resolve every missing expiry,
+   marker and counter-ledger gap before enabling cache projection writes.
+5. Provision the fully disjoint shadow namespace and prove its ACLs cannot write
+   original topics, schemas, indexes or volumes.
+6. Replay only the authorized bounded offsets, preserving event IDs, event time,
+   source coordinates, provenance and original contract version.
+7. Reconcile by stable event/window identities and semantic payload digests;
+   preserve overlapping windows and report legacy prediction IDs separately.
+8. Compare PostgreSQL receipts/business rows, outbox effects, search documents and
+   cache projections; disposition every ledger entry and accepted gap in writing.
+9. Run interruption/restart, duplicate publication, SQL/search/cache convergence,
+   authentication, monitoring and rollback acceptance tests on the shadow data.
+10. Under a separately approved cutover window, define the producer/consumer
+    boundary and reconcile writes accepted on both sides before routing changes.
+11. Roll back by stopping shadow/new writers, retaining their state, reconciling
+    all writes accepted after the boundary, and restoring matching old image/state
+    copies. Never point 7.4 at files rewritten by 8.4 or restart the damaged driver.
+12. Abandon cutover on expired required offsets, archive mismatch, unresolved
+    identity/payload discrepancies, schema semantics that cannot be proved,
+    incomplete outbox/TTL evidence, isolation failure, failed recovery tests or
+    inability to reconcile writes accepted during rollback.
+
+Required future approvals are historical data ownership/replay authorization, any
+accepted data-loss or semantic-gap disposition, access to copied legacy Redis
+payloads, a cutover maintenance window, traffic/offset boundary, rollback policy
+and production promotion. This phase grants none of them.
