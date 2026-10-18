@@ -714,3 +714,34 @@ AMD64 runtime verification and the previous capacity/operational release gates.
 A deployment/configuration change requires renewed assessment of these bounded
 classifications. No approval to release, migrate retained data or promote `main`
 is implied by this investigation.
+
+
+## Phase 4B scoped Redis change
+
+The hardened Redis build now pins the tested 8.4.7 Alpine input by digest; the
+preserved development Compose file and original Redis volume are unchanged.
+New provisioning keeps TLS-only transport, `user default off`, separate identities,
+existing key patterns and internal networks. Alert permissions add read-only
+LRANGE/TTL for list/counter verification; storage adds TTL. Neither runtime identity
+receives administrative or transaction commands. New Redis configuration states
+`appendfsync everysec` and refuses truncated AOF loading. The fixed EXEC replay path
+does not widen permissions for normal connected clients.
+
+The linux/arm64 built Redis image `07f8d9d5bdfc` was scanned with Trivy 0.76.0:
+**0 critical, 0 high, 0 medium, 0 low** known package findings. This covers this
+image and scanner database observation, not all source-level server defects or
+unchanged Spark/Kafka/monitoring findings. redis-py 5.2.1 is unchanged and exercised
+against the real upgraded server. AMD64 remains unverified. All-service release
+blockers and the prior critical/high findings above remain in effect.
+
+Application monitoring no longer labels Redis healthy/online from PING. It reports
+connection readiness separately and leaves projection correctness degraded; public
+liveness and SQL/auth readiness reveal no Redis diagnostics. Reconciliation metrics
+and private service/startup logs provide bounded progress/failure evidence. A lease
+stored in Redis is telemetry, never authorization to trust a partially restored
+keyspace. Sessions, login throttles and durable deduplication stay in PostgreSQL.
+
+See the Phase 4B section of [SPARK_RECOVERY.md](SPARK_RECOVERY.md) for projection
+scope, unknown legacy expiry, scratch/replay budgets, opt-in tests, migration and
+rollback. There is no authorization to upgrade retained state in place or promote
+the tested configuration to production.

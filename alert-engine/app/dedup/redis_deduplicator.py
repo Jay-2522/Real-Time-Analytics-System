@@ -41,9 +41,9 @@ class AlertDeduplicator:
             logger.warning("redis_dedup_failed action=emit_alert reason=%s", exc)
             return True
 
-    def update_live_caches(self, alert: AlertEvent) -> None:
+    def update_live_caches(self, alert: AlertEvent, expires_at=None) -> None:
         from pipeline_runtime.cache import cache_once
         cache_once(self._client, "alert", alert.alert_id, f"latest:alert:{alert.entity_id}",
                    alert.timestamp.isoformat(), alert.model_dump(mode="json"),
                    [f"counters:alerts:severity:{alert.severity}", f"counters:alerts:entity:{alert.entity_id}"],
-                   list_key="live:critical-alerts" if alert.severity == "critical" else "")
+                   list_key="live:critical-alerts" if alert.severity == "critical" else "", expires_at=expires_at)

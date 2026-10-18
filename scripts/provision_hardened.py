@@ -54,9 +54,9 @@ def main():
     write('redis/users.acl', 'user default off\n' + '\n'.join([
         f'user {name} on >{passwords[name]} ~{pattern} {commands}'
         for name,pattern,commands in [('redis-admin','*','+@all'),('backend','*','+ping +get +mget +exists'),
-                                      ('storage','pipeline:cache:storage:* ~pipeline:cache:storage-high-risk:* ~latest:prediction:* ~latest:event:* ~recent:high-risk:* ~counters:events:* ~counters:severity:*','+ping +get +set +setex +expire +del +eval +exists +incr'),('alerts','alert:* ~pipeline:cache:alert:* ~latest:alert:* ~counters:alerts:* ~live:critical-alerts','+ping +get +set +setex +expire +incr +incrby +del +eval +exists +type +lpush +ltrim'),
+                                      ('storage','pipeline:cache:storage:* ~pipeline:cache:storage-high-risk:* ~latest:prediction:* ~latest:event:* ~recent:high-risk:* ~counters:events:* ~counters:severity:*','+ping +get +set +setex +expire +del +eval +exists +incr +ttl'),('alerts','alert:* ~pipeline:cache:alert:* ~latest:alert:* ~counters:alerts:* ~live:critical-alerts','+ping +get +set +setex +expire +incr +incrby +del +eval +exists +type +lpush +ltrim +lrange +ttl'),
                                       ('threat','ioc:*','+ping +setex')]])+'\n')
-    write('redis/redis.conf','port 0\ntls-port 6379\ntls-cert-file /run/tls/server.crt\ntls-key-file /run/tls/server.key\ntls-ca-cert-file /run/tls/ca.crt\ntls-auth-clients no\naclfile /run/tls/users.acl\nappendonly yes\ndir /data\n')
+    write('redis/redis.conf','port 0\ntls-port 6379\ntls-cert-file /run/tls/server.crt\ntls-key-file /run/tls/server.key\ntls-ca-cert-file /run/tls/ca.crt\ntls-auth-clients no\naclfile /run/tls/users.acl\nappendonly yes\nappendfsync everysec\naof-load-truncated no\ndir /data\n')
     for name in ('backend','storage','alerts','threat'):
         value={'database_url':f'postgresql+psycopg://{name}:{quote(passwords[name])}@postgres:5432/soc?sslmode=verify-full&sslrootcert=/run/security/ca.crt',
                'redis':{'username':name,'password':passwords[name],'ssl_ca_certs':'/run/security/ca.crt'},

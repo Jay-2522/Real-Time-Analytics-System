@@ -1,4 +1,5 @@
 from infrastructure_runtime.security import kafka_options
+from pipeline_runtime.cache_recovery import CacheReconciler
 from pipeline_runtime.durable import OutboxWorker, quarantine_record, IdentityConflict
 from pipeline_runtime.identity import quarantine
 from app.schemas.alerts import AlertEvent
@@ -30,8 +31,8 @@ class AlertEngineConsumer:
         self._running = True
         self._outbox = OutboxWorker(session_factory, "alert", {
             "elasticsearch": self._index_projection,
-            "redis": lambda key, payload: service._deduplicator.update_live_caches(AlertEvent.model_validate(payload)),
-        })
+            "redis": lambda key, payload: service._deduplicator.update_live_caches(AlertEvent.model_validate(payload), payload.get("_cache_expires_at")),
+        }, reconciler=CacheReconciler(session_factory, "alert", service._deduplicator._client))
 
     def _index_projection(self, key, payload):
         from app.db.models import Incident

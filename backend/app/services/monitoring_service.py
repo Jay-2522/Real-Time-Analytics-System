@@ -164,7 +164,7 @@ class MonitoringService:
         try:
             client = redis.Redis.from_url(self._settings.redis_url, socket_connect_timeout=1, socket_timeout=1, **redis_options())
             client.ping()
-            return ServiceHealth(name="Redis", status="healthy", detail="Redis ping succeeded.", category="cache", endpoint="localhost:6379", last_checked=checked_at)
+            return ServiceHealth(name="Redis", status="degraded", detail="Redis connection ready; cache projections require SQL reconciliation. Persisted reads use PostgreSQL.", category="cache", endpoint="localhost:6379", last_checked=checked_at)
         except Exception as exc:
             logger.warning("redis_health_check_failed error=%s", exc)
             return ServiceHealth(name="Redis", status="degraded", detail="Redis is unavailable; cache-backed monitoring is degraded.", category="cache", endpoint="localhost:6379", last_checked=checked_at)

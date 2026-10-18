@@ -242,7 +242,7 @@ if {namespace!r} in ('storage','alert'):
  namespace={namespace!r}
  latest=('latest:alert:' if namespace=='alert' else 'recent:high-risk:')+key
  counters=[('counters:alerts:entity:' if namespace=='alert' else 'counters:events:')+key]
- cache_once(r,namespace,key,latest,'2026-10-17T00:00:00Z',{{'security_probe':True}},counters,list_key='live:critical-alerts' if namespace=='alert' else '')
+ cache_once(r,namespace,key,latest,'2026-10-17T00:00:00Z',{{'security_probe':True,'timestamp':'2026-10-17T00:00:00Z','alert_id':key}},counters,list_key='live:critical-alerts' if namespace=='alert' else '')
  cache_once(r,namespace,key,latest,'2026-10-17T00:00:00Z',{{'security_probe':True}},counters)
  assert int(r.get(counters[0]))==1 and r.get(latest)
 if {namespace!r}=='threat':

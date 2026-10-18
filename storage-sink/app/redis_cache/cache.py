@@ -24,7 +24,7 @@ class RedisCache:
             self._available = False
             logger.warning("redis_unavailable action=continue_without_cache reason=%s", exc)
 
-    def update(self, record: StorageRecord, key: str) -> None:
+    def update(self, record: StorageRecord, key: str, expires_at=None) -> None:
         from pipeline_runtime.cache import cache_once
         counters = []
         if record.event_type:
@@ -35,10 +35,10 @@ class RedisCache:
                   else f"recent:high-risk:{record.entity_id or key}" if (record.ml_risk_score or record.risk_score or 0) >= 70
                   else f"latest:event:{record.entity_id or key}")
         try:
-            cache_once(self._client, "storage", key, latest, record.timestamp_or_created.isoformat(), record.raw_payload, counters)
+            cache_once(self._client, "storage", key, latest, record.timestamp_or_created.isoformat(), record.raw_payload, counters, expires_at=expires_at)
             if record.record_kind == "prediction" and (record.ml_risk_score or record.risk_score or 0) >= 70:
                 cache_once(self._client, "storage-high-risk", key, f"recent:high-risk:{record.entity_id or key}",
-                           record.timestamp_or_created.isoformat(), record.raw_payload, [])
+                           record.timestamp_or_created.isoformat(), record.raw_payload, [], expires_at=expires_at)
         except Exception:
             REDIS_CACHE_ERRORS_TOTAL.inc()
             raise

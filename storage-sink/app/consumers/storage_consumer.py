@@ -1,4 +1,5 @@
 from infrastructure_runtime.security import kafka_options
+from pipeline_runtime.cache_recovery import CacheReconciler
 from pipeline_runtime.durable import claim, enqueue, OutboxWorker, IdentityConflict
 from pipeline_runtime.identity import logical_key, quarantine
 from app.schemas.records import StorageRecord
@@ -42,8 +43,8 @@ class StorageSinkConsumer:
         self._running = True
         self._outbox = OutboxWorker(session_factory, "storage", {
             "elasticsearch": lambda key, payload: self._indexer.index(StorageRecord.model_validate(payload), key),
-            "redis": lambda key, payload: self._cache.update(StorageRecord.model_validate(payload), key),
-        })
+            "redis": lambda key, payload: self._cache.update(StorageRecord.model_validate(payload), key, payload.get("_cache_expires_at")),
+        }, reconciler=CacheReconciler(session_factory, "storage", cache._client))
 
     def run(self) -> None:
         self._register_shutdown_handlers()
@@ -73,6 +74,9 @@ class StorageSinkConsumer:
         return consumer
 
     def _persist(self, record, key):
+        # Persist the fallback once; retries/reconstruction must not invent a new time.
+        if record.timestamp is None:
+            record.timestamp = record.timestamp_or_created
         with self._session_factory() as session, session.begin():
             if not claim(session, "storage", key, record.raw_payload):
                 return

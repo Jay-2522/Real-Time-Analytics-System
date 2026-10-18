@@ -217,3 +217,27 @@ Do not run the legacy `PIPELINE_INTEGRATION` tests against preserved development
 endpoints to manufacture broader coverage. Keep those exclusions explicit. A
 single-node KRaft broker, one Docker host and a small functional test VM do not
 establish broker quorum HA, host-loss recovery or production throughput capacity.
+
+
+### Phase 4B Redis projection recovery
+
+Completed outbox effects can be lost by a later cache failure. They remain in the
+SQL ledger and are now included in bounded reconstruction; `done=true` does not
+certify Redis persistence. Alert/storage workers share a per-service PostgreSQL
+advisory lock with reconstruction before selecting outbox work. Rebuild uses
+absolute values and original markers, never globally resets `done`, and allows
+new SQL ingestion to enqueue pending effects while cache promotion is controlled.
+
+New Redis payloads persist `_cache_expires_at` at enqueue; storage also persists
+its timestamp fallback once. The expiry is not refreshed by retries. Metadata is
+excluded from cached alert payloads. Legacy unknown expiry/timestamp fails repair
+and requires an explicit migration policy on copies. Critical display history now
+uses timestamp/alert identity order (maximum 51), which can be reconstructed from
+durable payloads. No session/throttle state is rebuilt. PostgreSQL receipts and
+uniqueness remain the correctness authority during cache loss.
+
+The hardened fixed runtime, replay evidence, projection dimensions, operating
+budgets, monitoring and backup/rollback procedure are in
+[SPARK_RECOVERY.md](SPARK_RECOVERY.md#phase-4b-redis-recovery-contract-18-october-2026).
+API cache connectivity stays degraded without a correctness guarantee; persisted
+results use SQL. Retain the complete Redis outbox ledger through the replay horizon.

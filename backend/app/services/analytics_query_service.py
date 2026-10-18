@@ -142,6 +142,6 @@ class AnalyticsQueryService:
         try:
             client = redis.from_url(settings.redis_url, socket_connect_timeout=2, **redis_options())
             client.ping()
-            return SystemComponentHealth(name="Redis", status="online", detail="Cache is reachable.")
+            return SystemComponentHealth(name="Redis", status="degraded", detail="Redis connection ready; projection correctness is unverified. Results use PostgreSQL.")
         except Exception as exc:
-            return SystemComponentHealth(name="Redis", status="degraded", detail=str(exc))
+            return SystemComponentHealth(name="Redis", status="degraded", detail="Redis unavailable; persisted results use PostgreSQL.")
