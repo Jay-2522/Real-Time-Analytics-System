@@ -1,7 +1,7 @@
 from infrastructure_runtime.security import elasticsearch_options
 import logging
 
-from elasticsearch import Elasticsearch
+from elasticsearch import Elasticsearch, ConflictError
 
 from app.config.settings import AlertEngineSettings
 from app.schemas.alerts import AlertEvent
@@ -30,6 +30,14 @@ class AlertIndexer:
 
     def index_alert(self, alert: AlertEvent) -> None:
         self._client.index(index="alerts", id=alert.alert_id, document=alert.model_dump(mode="json"))
+
+    def index_incident(self, document: dict, version: int) -> None:
+        try:
+            self._client.index(index="incidents", id=document['incident_id'], document=document,
+                               version=version, version_type="external_gte")
+        except ConflictError:
+            # A newer authoritative SQL snapshot already won an out-of-order retry.
+            pass
 
     @staticmethod
     def _mapping() -> dict:

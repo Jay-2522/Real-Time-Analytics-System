@@ -14,11 +14,15 @@ import httpx
 import pytest
 
 ROOT=Path(__file__).resolve().parents[2]
+PROJECT=os.environ.get('HARDENED_PROJECT','soc-hardened')
 pytestmark=[pytest.mark.integration,pytest.mark.skipif(os.environ.get('HARDENED_INTEGRATION')!='1',reason='Requires isolated hardened deployment')]
 
 
 def compose(*args,input=None,timeout=90,expected_returncode=0):
-    result=subprocess.run(['docker','compose','-f',str(ROOT/'deploy/hardened/compose.yml'),*args],input=input,text=True,capture_output=True,timeout=timeout)
+    files=['-f',str(ROOT/'deploy/hardened/compose.yml')]
+    if os.environ.get('HARDENED_COMPOSE_OVERRIDE'):
+        files+=['-f',os.environ['HARDENED_COMPOSE_OVERRIDE']]
+    result=subprocess.run(['docker','compose','-p',PROJECT,*files,*args],input=input,text=True,capture_output=True,timeout=timeout)
     if result.returncode!=expected_returncode:
         # Keep diagnostics private and ignored; never expose credentials in pytest output.
         directory=ROOT/'.codex-logs/hardening'
@@ -149,7 +153,7 @@ def test_network_paths_and_published_ports(stack):
         assert (service=='web') == bool(bindings)
     pg=json.loads(subprocess.check_output(['docker','inspect',compose('ps','-q','postgres').strip()],text=True))[0]
     address=next(iter(pg['NetworkSettings']['Networks'].values()))['IPAddress']
-    probe=subprocess.run(['docker','run','--rm','--network','soc-hardened_web','--cap-drop=ALL','--security-opt=no-new-privileges','soc-hardened-backend','python','-c',
+    probe=subprocess.run(['docker','run','--rm','--network',PROJECT+'_web','--cap-drop=ALL','--security-opt=no-new-privileges','soc-hardened-backend','python','-c',
         f"import socket;s=socket.socket();s.settimeout(2);assert s.connect_ex(('{address}',5432))!=0"],capture_output=True,timeout=15)
     assert probe.returncode==0
 

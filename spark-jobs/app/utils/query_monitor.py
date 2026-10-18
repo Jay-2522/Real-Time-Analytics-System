@@ -1,3 +1,4 @@
+from app.utils.recovery_metrics import QueryMetrics
 import logging
 import threading
 from typing import List
@@ -8,21 +9,26 @@ logger = logging.getLogger(__name__)
 
 
 class StreamingQueryMonitor:
-    def __init__(self, queries: List[StreamingQuery], interval_seconds: int = 30) -> None:
+    def __init__(self, queries: List[StreamingQuery], interval_seconds: int = 5) -> None:
+        self.metrics = QueryMetrics()
         self._queries = queries
         self._interval_seconds = interval_seconds
         self._stopped = threading.Event()
         self._thread = threading.Thread(target=self._run, name="streaming-query-monitor", daemon=True)
 
     def start(self) -> None:
+        self.metrics.update(self._queries)
+        self.metrics.start()
         self._thread.start()
 
     def stop(self) -> None:
         self._stopped.set()
         self._thread.join(timeout=5)
+        self.metrics.stop()
 
     def _run(self) -> None:
         while not self._stopped.wait(self._interval_seconds):
+            self.metrics.update(self._queries)
             for query in self._queries:
                 if not query.isActive:
                     logger.error("query_inactive name=%s exception=%s", query.name, query.exception())

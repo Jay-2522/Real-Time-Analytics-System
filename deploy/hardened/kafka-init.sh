@@ -22,6 +22,10 @@ allow alerts Read ml.anomaly.predictions
 allow alerts Read analytics.
 allow threat Read telemetry.
 allow threat Read ml.anomaly.predictions
+# The threat consumer also subscribes to these two analytics products, not all analytics.
+for topic in analytics.enriched.events analytics.risk.metrics; do
+  kafka-acls --bootstrap-server "$broker" --command-config "$config" --add --allow-principal User:CN=threat --operation Read --resource-pattern-type literal --topic "$topic"
+done
 for identity in consumer spark ml storage alerts threat; do
   kafka-acls --bootstrap-server "$broker" --command-config "$config" --add --allow-principal "User:CN=$identity" --operation Read --resource-pattern-type prefixed --group "$identity-"
 done

@@ -1,4 +1,8 @@
 from infrastructure_runtime.security import kafka_options
+from pipeline_runtime.kafka import CONSUMER_OPTIONS, DeliveryLoop
+from pipeline_runtime.identity import coordinate, logical_key, stable_uuid, quarantine
+from pipeline_runtime.durable import claim, enqueue, quarantine_record, OutboxWorker, IdentityConflict
+from sqlalchemy import text
 import json
 import logging
 import signal
@@ -45,24 +49,20 @@ class ThreatIntelConsumer:
         self._indexer = indexer
         self._consumer: Consumer | None = None
         self._running = True
+        self._outbox = OutboxWorker(session_factory, "threat", {
+            "elasticsearch": lambda key, payload: self._indexer.index(ThreatEnrichment.model_validate(payload))})
 
     def run(self) -> None:
         self._register_shutdown_handlers()
         self._consumer = retry_with_backoff(self._create_consumer, logger, "Kafka threat-intelligence consumer connection")
         logger.info("subscribing_threat_intelligence topics=%s group=%s", THREAT_INPUT_TOPICS, self._settings.consumer_group)
-        self._consumer.subscribe(list(THREAT_INPUT_TOPICS))
-
-        while self._running:
-            message = self._consumer.poll(timeout=1.0)
-            if message is None:
-                continue
-            if message.error():
-                logger.error("threat_intel_kafka_error error=%s", message.error())
-                continue
-            self._handle_message(message.topic(), message.value())
-
-        logger.info("closing_threat_intelligence_consumer")
-        self._consumer.close()
+        self._outbox.start()
+        try:
+            DeliveryLoop(self._consumer, "threat").run(THREAT_INPUT_TOPICS,
+                lambda message: self._handle_message(message.topic(), message.value(), coordinate(message)),
+                lambda: self._running)
+        finally:
+            self._outbox.stop()
 
     def _create_consumer(self) -> Consumer:
         consumer = Consumer(
@@ -72,39 +72,44 @@ class ThreatIntelConsumer:
                 "group.id": self._settings.consumer_group,
                 "client.id": "streaming-analytics-threat-intelligence",
                 "auto.offset.reset": "earliest",
-                "enable.auto.commit": True,
+                **CONSUMER_OPTIONS,
             }
         )
         metadata = consumer.list_topics(timeout=10)
         logger.info("threat_intel_kafka_connected brokers=%s", len(metadata.brokers))
         return consumer
 
-    def _handle_message(self, topic: str, payload: bytes | None) -> None:
+    def _handle_message(self, topic: str, payload: bytes | None, position=None) -> None:
+        try:
+            parsed = json.loads(payload.decode("utf-8")) if payload else None
+            key = logical_key(topic, parsed)
+        except (UnicodeError, ValueError, TypeError, KeyError) as exc:
+            with self._session_factory() as session, session.begin():
+                quarantine_record(session, "threat", quarantine(topic, payload, exc, position))
+            THREAT_ENGINE_ERRORS_TOTAL.labels("invalid_input").inc()
+            return
         start = time.perf_counter()
         try:
-            if payload is None:
-                return
-            parsed = json.loads(payload.decode("utf-8"))
-            enrichment = self._enrich(topic, parsed)
-            with self._session_factory() as session:
+            with self._session_factory() as session, session.begin():
+                if not claim(session, "threat", key, parsed):
+                    return
+                enrichment = self._enrich(topic, parsed)
+                enrichment.event_id = str(stable_uuid("threat-v1", key))
+                enrichment.source_event_id = str(parsed.get("prediction_id") or parsed.get("event_id") or key)
+                # Serialize shared entity/timeline updates across independent inputs.
+                session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:entity, 0))"),
+                                {"entity": "threat:" + str(enrichment.entity_id)})
                 self._repository.persist(session, enrichment)
-                session.commit()
-            self._indexer.index(enrichment)
+                enqueue(session, "threat", key, "elasticsearch", enrichment.model_dump(mode="json"))
             THREAT_EVENTS_PROCESSED_TOTAL.labels(topic).inc()
             THREAT_ENRICHMENT_LATENCY_SECONDS.observe(time.perf_counter() - start)
-            logger.info(
-                "threat_event_enriched event_id=%s entity_id=%s score=%s severity=%s tactic=%s rule_hits=%s iocs=%s",
-                enrichment.event_id,
-                enrichment.entity_id,
-                enrichment.threat_score,
-                enrichment.severity,
-                enrichment.tactic,
-                len(enrichment.rule_hits),
-                len(enrichment.iocs),
-            )
+        except IdentityConflict as exc:
+            with self._session_factory() as session, session.begin():
+                quarantine_record(session, "threat", quarantine(topic, payload, exc, position))
+            THREAT_ENGINE_ERRORS_TOTAL.labels("identity_conflict").inc()
         except Exception:
             THREAT_ENGINE_ERRORS_TOTAL.labels("message_processing").inc()
-            logger.exception("threat_intel_message_failed topic=%s", topic)
+            raise
 
     def _enrich(self, topic: str, payload: dict[str, Any]) -> ThreatEnrichment:
         base_risk = float(payload.get("ml_risk_score") or payload.get("risk_score") or payload.get("risk_score_moving_average") or 0)

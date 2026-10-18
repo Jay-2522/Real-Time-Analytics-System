@@ -29,9 +29,23 @@ class AlertEngineConsumer:
         self._consumer: Consumer | None = None
         self._running = True
         self._outbox = OutboxWorker(session_factory, "alert", {
-            "elasticsearch": lambda key, payload: service._indexer.index_alert(AlertEvent.model_validate(payload)),
+            "elasticsearch": self._index_projection,
             "redis": lambda key, payload: service._deduplicator.update_live_caches(AlertEvent.model_validate(payload)),
         })
+
+    def _index_projection(self, key, payload):
+        from app.db.models import Incident
+        from datetime import datetime
+        alert = AlertEvent.model_validate(payload)
+        self._service._indexer.index_alert(alert)
+        if alert.incident_id:
+            with self._session_factory() as session:
+                row = session.query(Incident).filter_by(incident_id=alert.incident_id).one()
+                document = {column.name: getattr(row, column.name) for column in Incident.__table__.columns
+                            if column.name != 'id'}
+                document = {k: v.isoformat() if isinstance(v, datetime) else v for k,v in document.items()}
+                version = int(row.updated_at.timestamp()*1_000_000)
+            self._service._indexer.index_incident(document, version)
 
     def run(self) -> None:
         self._register_shutdown_handlers()

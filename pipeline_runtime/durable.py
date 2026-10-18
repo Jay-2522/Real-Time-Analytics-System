@@ -10,6 +10,7 @@ from pipeline_runtime.identity import digest
 
 logger = logging.getLogger(__name__)
 OUTBOX_FAILURES = Counter("pipeline_outbox_failures_total", "Recoverable external side-effect failures", ["service", "target"])
+OUTBOX_WORKER_FAILURES = Counter("pipeline_outbox_worker_failures_total", "Failed outbox database observations", ["service"])
 OUTBOX_PENDING = Gauge("pipeline_outbox_pending", "Pending durable side effects", ["service"])
 
 
@@ -98,6 +99,7 @@ class OutboxWorker:
                     processed = self.drain_once()
                 except Exception:
                     processed = 0
+                    OUTBOX_WORKER_FAILURES.labels(self.service).inc()
                     logger.exception("outbox_worker_retry service=%s", self.service)
                 self.stop_event.wait(0.01 if processed == 20 else 2)
         self.thread = threading.Thread(target=run, daemon=True, name=f"{self.service}-outbox")

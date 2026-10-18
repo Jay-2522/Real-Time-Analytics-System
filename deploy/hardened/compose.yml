@@ -271,11 +271,12 @@ services:
       SERVICE_SECURITY_FILE: /run/security/security.json
       SPARK_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       SPARK_CHECKPOINT_ROOT: /opt/spark/checkpoints
+      SPARK_METRICS_TOKEN_FILE: /run/security/metrics-token
     volumes:
       - spark_state:/opt/spark/checkpoints
       - ${HARDENED_SECRETS_DIR:?required}/spark:/run/security:ro
       - ${HARDENED_SECRETS_DIR:?required}/spark/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
-    networks: [compute, messaging]
+    networks: [compute, messaging, monitoring]
 
   telemetry-producer:
     profiles:

@@ -15,3 +15,4 @@ COPY kafka-producers/app ./app
 CMD ["python", "-m", "app.main", "producer"]
 
 COPY infrastructure_runtime /app/infrastructure_runtime
+COPY pipeline_runtime /app/pipeline_runtime

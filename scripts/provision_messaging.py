@@ -38,6 +38,7 @@ def prepare(root):
         if name=='spark': value['kafka_java']['groupIdPrefix']='spark-hardened'
         write(name+'/security.json',json.dumps(value))
         write(name+'/client.properties','\n'.join(k+'='+v for k,v in java.items())+'\n')
+    write('spark/metrics-token',(root/'backend/metrics-token').read_text())
     rpc=secrets.token_urlsafe(48)
     write('spark/spark-defaults.conf',f'spark.authenticate true\nspark.authenticate.secret {rpc}\nspark.network.crypto.enabled true\nspark.io.encryption.enabled true\nspark.ui.enabled false\nspark.master.rest.enabled false\nspark.local.dir /tmp/spark\nspark.driver.host spark-driver\nspark.executor.memory 512m\nspark.driver.memory 512m\n')
     write('kafka/cluster-id',base64.urlsafe_b64encode(uuid.uuid4().bytes).decode().rstrip('=')+'\n')

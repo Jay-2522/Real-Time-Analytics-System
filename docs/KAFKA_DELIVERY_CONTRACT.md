@@ -133,3 +133,87 @@ Known limits:
   but the existing streaming job cannot resume those checkpoints. They were preserved;
   full source-to-Spark live recovery remains blocked pending checkpoint recovery.
   No checkpoint deletion, historical-event deletion or group reset was performed.
+
+## Phase 4A extension (18 October 2026)
+
+The original Phase 2A scope/results above remain historical. The hardened runtime
+now extends manual acknowledgement to **telemetry validation and threat
+intelligence**, in addition to ML, storage and alerts. This remains at-least-once
+processing; no cross-system exactly-once transaction is claimed.
+
+### Corrections
+
+- Telemetry validation disables automatic commit/store and uses `DeliveryLoop`.
+  Invalid input is acknowledged only after a confirmed DLQ publication. DLQ IDs
+  derive from topic, exact input bytes and source coordinates; retry preserves
+  logical identity and Kafka source timestamp (an absent timestamp uses an explicit
+  epoch sentinel). This prevents replay from producing conflicting DLQ payloads
+  under the same ID. Validation/log metrics are observational, not durable outputs.
+- The synthetic producer increments published counts only after a delivery callback
+  and empty flush queue confirm success. Transient failure retries the **same**
+  generated event rather than generating another one. The generator is not a
+  durable upstream event source: process/host loss can lose an unconfirmed in-memory
+  event, and an ambiguous acknowledgement can cause replay. Real sources require
+  their own durable spool/acknowledgement contract.
+- Threat input uses transactional `service='threat'` receipts, stable enrichment
+  IDs, SQL quarantine and an Elasticsearch outbox. Receipt, business rows, profile/
+  timeline updates and queued search effects commit together. A PostgreSQL advisory
+  lock serializes concurrent inputs for the same entity. Duplicate delivery does
+  not repeat IOC/rule-hit inserts or increment durable entity/timeline counters.
+- Threat search failures propagate to the outbox instead of being swallowed or
+  permanently disabled after a startup failure. Partial multi-index completion is
+  retried using deterministic document IDs. Redis IOC cache failure remains optional
+  and cannot authorize a durable acknowledgement on failed SQL.
+- Hardened bootstrap grants the threat identity access only to its own receipt/
+  outbox/quarantine rows through row policies. Kafka provisioning adds **literal
+  read ACLs for `analytics.enriched.events` and `analytics.risk.metrics`**, matching
+  its existing subscriptions; it does not grant general analytics administration.
+- The alert Elasticsearch outbox also projects the latest authoritative SQL incident
+  snapshot. Snapshot versions use SQL `updated_at`; older external versions cannot
+  overwrite a newer incident document. Transport/authentication/indexing failures
+  keep work pending. An older-version conflict is already superseded, not a failed
+  effect silently discarded. This closes the previously missing incident search
+  projection for newly processed/replayed outbox work; it does not backfill retained
+  historical databases automatically.
+
+A receipt hit is not permission to prune Kafka history, receipts or pending outbox
+rows. Threat detection rules, model artifacts and identity algorithm changes need
+an explicit replay/version policy; receipts do not re-run old inputs under a changed
+rule set. Existing random-ID threat rows are not retroactively reconciled by the
+new deterministic identities.
+
+### Failure evidence and operational checks
+
+The permanent hardened recovery tests use a separate Docker VM/project with mTLS,
+SQL/search TLS, Redis ACLs, row-scoped roles and protected HTTP access. They cover
+actual driver/worker process loss, unavailable dependencies, outbox interruption,
+confirmed/failed Kafka publication and duplicate delivery. Expected logical counts
+are established before input publication; checkpoints, Kafka coordinates, identities
+and reconciliation output are retained outside Git. See [Spark recovery](SPARK_RECOVERY.md)
+for the exact test scope, final results and the approval boundary for legacy state.
+
+Monitor `pipeline_processing_failures_total`, confirmed commits,
+`pipeline_last_commit_timestamp_seconds`, sampled `pipeline_consumer_lag`,
+`pipeline_rebalances_total`, `pipeline_outbox_pending`,
+`pipeline_outbox_failures_total` and `pipeline_outbox_worker_failures_total`.
+Lag observations are sampled on successful processing and may be stale during
+idle/failing consumption. Missing/stale observations are not zero lag; compare
+broker group offsets with source high watermarks and known incoming traffic.
+Retained outbox errors/attempts and repeated process restarts require investigation.
+
+Use the already documented pending-outbox queries. Restore the failed dependency,
+then restart exited **isolated/hardened** services without resetting their groups.
+A completed effect whose SQL acknowledgement was lost may run again; deterministic
+ES IDs and intact Redis markers prevent duplicate business effects. Phase 4A
+found that Redis 7.4.11 AOF replay can lose those markers and cache counters under
+the retained ACLs, despite completed outbox rows. SQL receipt/business uniqueness
+remains intact, but cache restart correctness is blocked; see the Redis blocker in
+[Spark recovery](SPARK_RECOVERY.md). Do not equate an empty outbox or a healthy
+Redis process with a reconciled cache. Search/cache are
+allowed to be temporarily inconsistent while pending work retries. Pending work
+that never converges is a release blocker, not a successful recovery.
+
+Do not run the legacy `PIPELINE_INTEGRATION` tests against preserved development
+endpoints to manufacture broader coverage. Keep those exclusions explicit. A
+single-node KRaft broker, one Docker host and a small functional test VM do not
+establish broker quorum HA, host-loss recovery or production throughput capacity.

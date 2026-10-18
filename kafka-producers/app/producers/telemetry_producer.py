@@ -1,4 +1,5 @@
 from infrastructure_runtime.security import kafka_options
+from pipeline_runtime.kafka import publish_confirmed
 import logging
 import signal
 import time
@@ -9,7 +10,7 @@ from confluent_kafka import KafkaException, Producer
 from app.config.settings import KafkaRuntimeSettings
 from app.config.topics import ANOMALY_EVENTS, API_EVENTS, LOGIN_EVENTS, NETWORK_EVENTS
 from app.generators.telemetry_generator import SyntheticTelemetryGenerator
-from app.schemas.events import AnomalyEvent, ApiEvent, DeadLetterEvent, LoginEvent, NetworkEvent, TelemetryEvent
+from app.schemas.events import AnomalyEvent, ApiEvent, LoginEvent, NetworkEvent, TelemetryEvent
 from app.utils.metrics import EVENTS_PUBLISHED_TOTAL, PRODUCER_ERRORS_TOTAL
 from app.utils.retry import retry_with_backoff
 
@@ -37,8 +38,14 @@ class TelemetryProducer:
 
         while self._running:
             event = self._generator.next_event()
-            self._publish_event(event)
-            self._producer.poll(0)
+            while self._running:
+                try:
+                    self._publish_event(event)
+                    break
+                except (KafkaException, BufferError, RuntimeError):
+                    PRODUCER_ERRORS_TOTAL.labels(self._topic_for_event(event)).inc()
+                    logger.exception("telemetry_delivery_unconfirmed event_id=%s; retrying same event", event.event_id)
+                    time.sleep(1)
             time.sleep(interval_seconds)
 
         logger.info("Flushing telemetry producer before shutdown")
@@ -54,6 +61,7 @@ class TelemetryProducer:
                 "retries": 5,
                 "linger.ms": 25,
                 "enable.idempotence": True,
+                "delivery.timeout.ms": 10000,
             }
         )
         metadata = producer.list_topics(timeout=10)
@@ -64,36 +72,9 @@ class TelemetryProducer:
         assert self._producer is not None
         topic = self._topic_for_event(event)
 
-        try:
-            payload = event.to_json_bytes()
-            self._producer.produce(
-                topic=topic,
-                key=str(event.event_id),
-                value=payload,
-                callback=self._delivery_report,
-            )
-            logger.info(
-                "published event_id=%s event_type=%s topic=%s risk_score=%s",
-                event.event_id,
-                event.event_type,
-                topic,
-                event.risk_score,
-            )
-            EVENTS_PUBLISHED_TOTAL.labels(topic, event.event_type).inc()
-        except (KafkaException, BufferError, ValueError, TypeError) as exc:
-            logger.exception("Failed to publish event_id=%s event_type=%s", event.event_id, event.event_type)
-            PRODUCER_ERRORS_TOTAL.labels(topic).inc()
-            self._publish_deadletter(source_topic=topic, reason=str(exc), payload=event.model_dump(mode="json"))
-
-    def _publish_deadletter(self, source_topic: str, reason: str, payload: object) -> None:
-        assert self._producer is not None
-        deadletter = DeadLetterEvent(source_topic=source_topic, reason=reason, payload=payload)
-        self._producer.produce(
-            topic=self._settings.deadletter_topic,
-            key=str(deadletter.event_id),
-            value=deadletter.to_json_bytes(),
-            callback=self._delivery_report,
-        )
+        publish_confirmed(self._producer, topic=topic, key=str(event.event_id), value=event.to_json_bytes())
+        EVENTS_PUBLISHED_TOTAL.labels(topic, event.event_type).inc()
+        logger.info("published_confirmed event_id=%s topic=%s", event.event_id, topic)
 
     @staticmethod
     def _topic_for_event(event: TelemetryEvent) -> str:
@@ -106,13 +87,6 @@ class TelemetryProducer:
         if isinstance(event, AnomalyEvent):
             return ANOMALY_EVENTS
         raise TypeError(f"Unsupported telemetry event type: {type(event).__name__}")
-
-    @staticmethod
-    def _delivery_report(error: KafkaException | None, message: object) -> None:
-        if error is not None:
-            logger.error("Kafka delivery failed: %s", error)
-            topic = message.topic() if hasattr(message, "topic") else "unknown"
-            PRODUCER_ERRORS_TOTAL.labels(topic).inc()
 
     def _register_shutdown_handlers(self) -> None:
         def shutdown_handler(signum: int, _frame: FrameType | None) -> None:

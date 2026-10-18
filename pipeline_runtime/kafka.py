@@ -1,12 +1,15 @@
 """One synchronous in-flight record; fail closed and replay after a bounded restart delay."""
 import logging
 import time
-from prometheus_client import Counter
+from prometheus_client import Counter, Gauge
 
 logger = logging.getLogger(__name__)
 FAILURES = Counter("pipeline_processing_failures_total", "Unacknowledged processing/commit failures", ["service"])
 COMMITS = Counter("pipeline_commits_total", "Confirmed input offset commits", ["service"])
 REBALANCES = Counter("pipeline_rebalances_total", "Assignment/revocation/loss callbacks", ["service", "event"])
+
+LAST_SUCCESS = Gauge("pipeline_last_commit_timestamp_seconds", "Last successful acknowledgement", ["service"])
+LAG = Gauge("pipeline_consumer_lag", "Observed high watermark minus committed next offset", ["service", "topic", "partition"])
 
 CONSUMER_OPTIONS = {"enable.auto.commit": False, "enable.auto.offset.store": False,
                     "auto.offset.reset": "earliest", "max.poll.interval.ms": 300000}
@@ -17,6 +20,7 @@ class DeliveryLoop:
         self.consumer = consumer
         self.service = service
         self.epoch = 0
+        self.last_lag_check = 0.0
 
     def _rebalance(self, event):
         def callback(consumer, partitions):
@@ -40,6 +44,18 @@ class DeliveryLoop:
             if results and any(p.error for p in results):
                 raise RuntimeError(f"Offset commit failed: {results}")
             COMMITS.labels(self.service).inc()
+            LAST_SUCCESS.labels(self.service).set(time.time())
+            # Monitoring failure must not turn a successfully committed record into an error.
+            if time.monotonic() - self.last_lag_check >= 10:
+                try:
+                    from confluent_kafka import TopicPartition
+                    _, high = self.consumer.get_watermark_offsets(
+                        TopicPartition(message.topic(), message.partition()), timeout=1, cached=False)
+                    LAG.labels(self.service, message.topic(), str(message.partition())).set(
+                        max(0, high - message.offset() - 1))
+                    self.last_lag_check = time.monotonic()
+                except Exception:
+                    logger.warning("consumer_lag_observation_unavailable service=%s", self.service)
         except Exception:
             FAILURES.labels(self.service).inc()
             logger.exception("input_unacknowledged service=%s topic=%s partition=%s offset=%s",

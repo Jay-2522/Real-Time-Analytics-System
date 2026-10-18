@@ -24,3 +24,8 @@ scrape_configs:
   - job_name: threat-intelligence-engine
     static_configs:
       - targets: ['threat-intelligence-engine:9106']
+  - job_name: spark-driver
+    authorization:
+      credentials_file: /run/security/metrics-token
+    static_configs:
+      - targets: ['spark-driver:9107']

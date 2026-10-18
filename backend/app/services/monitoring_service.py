@@ -74,11 +74,20 @@ class MonitoringService:
                 elastic_status,
                 ServiceHealth(name="Grafana", status="healthy", detail="Provisioned locally at http://localhost:3000.", category="observability", endpoint="http://localhost:3000", last_checked=now),
                 ServiceHealth(name="Kafka", status="observing", detail="Kafka is monitored indirectly through pipeline throughput and service consumers.", category="streaming", endpoint="http://localhost:8080", last_checked=now),
-                ServiceHealth(name="Spark", status="observing", detail="Spark status is represented by analytics topic output and Docker service availability.", category="processing", endpoint="http://localhost:8081", last_checked=now),
+                self._spark_status(prometheus_targets, now),
                 ServiceHealth(name="Frontend", status="healthy", detail="React dashboard is served locally by the frontend container.", category="ui", endpoint="http://localhost:5173", last_checked=now),
             ]
         )
         return services
+
+    def _spark_status(self, targets, now):
+        active = self._prometheus_scalar('sum(spark_streaming_query_active)')
+        age = self._prometheus_scalar('time() - max(spark_query_monitor_timestamp_seconds)')
+        ready = targets.get('spark-driver') == 1 and active == 4 and age is not None and 0 <= age < 60
+        return ServiceHealth(name="Spark", status="healthy" if ready else "degraded",
+            detail="All four queries are active with a fresh authenticated observation." if ready
+                   else "Four active Spark queries have not been verified; analytics processing is degraded.",
+            category="processing", endpoint=None, last_checked=now)
 
     def pipeline(self, db: Session) -> PipelineMetrics:
         counts = self._pipeline_counts(db)

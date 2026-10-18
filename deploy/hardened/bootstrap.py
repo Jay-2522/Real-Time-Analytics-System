@@ -33,14 +33,13 @@ def main():
           'alerts':['alerts','incidents','incident_alert_links','alert_dedup_cache'],
           'threat':['threat_intel_events','ioc_matches','entity_profiles','detection_rule_hits','attack_timelines']}
         for name,names in tables.items():
-            for table in names+(['pipeline_receipts','pipeline_outbox','pipeline_quarantine'] if name!='threat' else []):
+            for table in names+['pipeline_receipts','pipeline_outbox','pipeline_quarantine']:
                 if db.execute(text('SELECT to_regclass(:table)'),{'table':table}).scalar():
                     db.execute(text(f'GRANT SELECT, INSERT, UPDATE ON {table} TO "{name}"'))
             db.execute(text(f'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "{name}"'))
         for table in ('pipeline_receipts','pipeline_outbox','pipeline_quarantine'):
-            db.execute(text(f'REVOKE ALL ON {table} FROM threat'))
             db.execute(text(f'ALTER TABLE {table} ENABLE ROW LEVEL SECURITY'))
-            for role,condition in (('backend','true'),('storage',"service = 'storage'"),('alerts',"service = 'alert'")):
+            for role,condition in (('backend','true'),('storage',"service = 'storage'"),('alerts',"service = 'alert'"),('threat',"service = 'threat'")):
                 policy='soc_'+role
                 if not db.execute(text('SELECT 1 FROM pg_policies WHERE tablename=:table AND policyname=:policy'),{'table':table,'policy':policy}).scalar():
                     db.execute(text(f'CREATE POLICY {policy} ON {table} TO {role} USING ({condition}) WITH CHECK ({condition})'))
