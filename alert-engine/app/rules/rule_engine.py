@@ -23,6 +23,8 @@ class AlertRulesEngine:
             candidates.append(("high_anomaly", "high", "High-risk anomaly detected", ["ml", "high", event_type]))
         elif anomaly_score >= 0.55 or ml_risk_score >= 60:
             candidates.append(("high_anomaly", "medium", "Elevated anomaly signal", ["ml", "medium", event_type]))
+        elif payload.get("is_anomaly") is True:
+            candidates.append(("model_anomaly", "medium", "ML anomaly detected", ["ml", "medium", event_type]))
 
         if event_type == "login" and (payload.get("login_success") is False or _float(payload.get("failed_login_rate")) >= 0.5):
             candidates.append(("credential_attack", "high", "Possible credential attack", ["identity", "login", "credential-stuffing"]))

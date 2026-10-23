@@ -16,6 +16,7 @@ RUN pip install --upgrade pip \
 
 COPY backend/app ./app
 COPY infrastructure_runtime ./infrastructure_runtime
+COPY migrations ./migrations
 
 EXPOSE 8000
 
