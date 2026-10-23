@@ -7,7 +7,7 @@ from typing import Any
 import yaml
 
 from app.schemas.threat import RuleHit
-from app.utils.metrics import DETECTION_RULE_EXECUTIONS_TOTAL, DETECTION_RULE_HITS_TOTAL
+from app.utils.metrics import DETECTION_RULE_EXECUTIONS_TOTAL, DETECTION_RULE_HITS_TOTAL, DETECTION_RULE_LOADED
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,9 @@ class DetectionRuleEngine:
             else:
                 logger.warning("invalid_detection_rule path=%s", path)
         self._rules = rules
+        DETECTION_RULE_LOADED.clear()
+        for rule in rules:
+            DETECTION_RULE_LOADED.labels(str(rule["id"]), str(rule["name"]), str(rule["severity"])).set(1)
         logger.info("detection_rules_loaded count=%s path=%s", len(rules), self._rules_path)
 
     def evaluate(self, payload: dict[str, Any], risk_score: float) -> list[RuleHit]:

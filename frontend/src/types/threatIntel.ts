@@ -52,6 +52,8 @@ export interface DetectionRuleSummary {
   avg_score: number;
 }
 
+export type LoadedDetectionRule = Pick<DetectionRuleSummary, "rule_id" | "name" | "severity" | "enabled">;
+
 export interface AttackTimeline {
   timeline_id: string;
   entity_id: string;

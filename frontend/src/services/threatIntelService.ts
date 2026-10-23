@@ -1,5 +1,5 @@
 import { httpClient } from "../api/httpClient";
-import type { AttackTimeline, DetectionRuleSummary, EntityProfile, IOCMatch, MitreTechnique, ThreatGraph, ThreatOverview } from "../types/threatIntel";
+import type { AttackTimeline, DetectionRuleSummary, EntityProfile, IOCMatch, LoadedDetectionRule, MitreTechnique, ThreatGraph, ThreatOverview } from "../types/threatIntel";
 
 export const threatIntelService = {
   async overview() {
@@ -38,6 +38,9 @@ export const threatIntelService = {
   },
   async rules() {
     return get<DetectionRuleSummary[]>("/detections/rules");
+  },
+  async loadedRules() {
+    return get<LoadedDetectionRule[]>("/detections/loaded-rules");
   },
   async ruleStats() {
     return get<{ total_rule_hits: number; rules: DetectionRuleSummary[] }>("/detections/rule-stats");

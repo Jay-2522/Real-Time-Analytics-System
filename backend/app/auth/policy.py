@@ -7,7 +7,7 @@ READ_PATHS = (
     r'/alerts/(recent|high|critical|stats|search)', r'/incidents/[^/]+',
     r'/monitoring/(overview|services|pipeline|errors|metrics-summary)',
     r'/threat-intel/(overview|iocs|entities|mitre|attack-timeline|risk-heatmap|threat-graph|search)',
-    r'/detections/(rules|rules/[^/]+|rule-stats)', r'/entities/[^/]+', r'/mitre/(tactics|techniques)',
+    r'/detections/(rules|loaded-rules|rules/[^/]+|rule-stats)', r'/entities/[^/]+', r'/mitre/(tactics|techniques)',
     r'/auth/me', r'/openapi.json',
 )
 
