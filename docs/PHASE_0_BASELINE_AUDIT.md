@@ -25,7 +25,6 @@ Before permitted source edits, 338 files were inventoried (excluding dependency 
 | Backend | `backend/app/main.py`, `uvicorn app.main:app`; REST queries, incident/alert status mutations, three polling WebSocket streams, `/metrics`; `create_all` on startup | FastAPI, Pydantic 2.10, SQLAlchemy, psycopg, PostgreSQL; Elasticsearch and Redis for search/health; Prometheus query API |
 | Frontend | `frontend/src/main.tsx` → `App.tsx`; 15 React routes for overview/live/risk/predictions/search/health/alerts/incidents/observability/threats/rules/hunting/MITRE/entities/timeline | React 18, TS 5.6, Vite 6, Axios, Recharts, D3, React Flow, Framer Motion |
 | Telemetry producer | `kafka-producers/app/main.py producer`; synthetic Pydantic login/API/network/anomaly events, controlled rate, delivery callbacks | confluent-kafka 2.6.1, Kafka |
-| Telemetry consumer | Same entry point with `consumer`; validation/logging, malformed messages to DLQ; **does not forward a validated stream to Spark** | Kafka, Pydantic |
 | Spark | `spark-jobs/Dockerfile` invokes Spark 3.5.3 `spark-submit`, Kafka connector `_2.12:3.5.3`, `app/main.py`; four independent streaming Kafka output queries | Spark master/worker/driver, container Python/Java, Maven connector download, checkpoint volume |
 | ML | `ml-models/app/main.py inference` or `train`; mapper → scaler → Isolation Forest; publishes predictions; optional automatic synthetic model bootstrap | scikit-learn 1.5.1, numpy 1.26.4, pandas 2.2.2, joblib 1.4.2, Pydantic 2.8, Kafka, mounted model artifacts |
 | Storage | `storage-sink/app/main.py`; raw telemetry, analytics, features, risks, predictions → PostgreSQL, then Elasticsearch and Redis | Kafka, PostgreSQL JSONB/upserts, Elasticsearch, Redis |
@@ -35,7 +34,7 @@ Before permitted source edits, 338 files were inventoried (excluding dependency 
 
 ### Actual data flow
 
-1. Producer publishes four `telemetry.*.events` topics. The separate telemetry consumer validates the same records for logs/DLQ.
+1. Producer publishes four `telemetry.*.events` topics. Storage-sink persists valid records and publishes malformed records to the DLQ.
 2. Spark independently reads all four topics, normalizes and filters them, and publishes `analytics.enriched.events`, `analytics.window.metrics`, `analytics.risk.metrics`, and `analytics.feature.engineering`. Window outputs use append mode and event-time watermarks (default two minutes; five-minute metric windows), so these can legitimately lag enriched events.
 3. ML consumes **all four** analytics topics, maps each incoming record separately to 15 default-filled features, and publishes `ml.anomaly.predictions`. It does not assemble a full entity/window feature vector across records.
 4. Alert engine consumes predictions, enriched events, and risk metrics; it is not a Kafka alert-output producer. Alerts/incidents go directly to databases/cache.
@@ -133,7 +132,6 @@ Final full startup used `docker compose pull --ignore-buildable`, `docker compos
 | backend | PASS | Container API returns persisted controlled prediction/search/entity data, dashboard totals and WebSocket snapshots; known health/security defects remain |
 | frontend | PASS | Container-served React app renders; browser search displayed three controlled records including actual prediction risk 61.1336 |
 | telemetry-producer | PASS | Sustained publish/delivery logs; telemetry SQL counts increase; controlled schema generation separately verified |
-| telemetry-consumer | PASS | Consumed/validated event logs and metrics; controlled event appears in logs |
 | spark-master | PASS | `/json` HTTP 200, ALIVE, registered worker/application |
 | spark-worker | PASS | Worker registered with master; executor RUNNING, 2 cores/1 GiB executor allocation; `/json` HTTP 200 |
 | spark-streaming | PASS for live processing | All four query names report progressing input batches; exact controlled enriched record read from Kafka. All four output paths emitted and were persisted after watermark closure (section D) |

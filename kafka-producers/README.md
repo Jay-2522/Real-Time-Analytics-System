@@ -1,20 +1,17 @@
-# Kafka Telemetry Runtime
+# Kafka Telemetry Producer
 
-Python runtime for Phase 2 synthetic telemetry production and validation.
+Python runtime for Phase 2 synthetic telemetry production.
 
 ## Responsibilities
 
 - Generate realistic cybersecurity and platform telemetry events.
 - Validate all outbound events with Pydantic schemas.
 - Publish events to Kafka topics with retry-safe producer configuration.
-- Consume telemetry topics and validate received payloads.
-- Route malformed or unprocessable messages to `telemetry.deadletter.events`.
 
-## Runtime Modes
+## Runtime
 
 ```bash
 python -m app.main producer
-python -m app.main consumer
 ```
 
 ## Environment Variables
@@ -25,8 +22,6 @@ python -m app.main consumer
 | `EVENT_RATE_PER_SECOND` | `5` | Producer event generation rate. |
 | `ANOMALY_RATE` | `0.05` | Probability of generating anomaly events. |
 | `PRODUCER_LOG_LEVEL` | `INFO` | Producer logging level. |
-| `KAFKA_CONSUMER_GROUP` | `streaming-analytics-telemetry-consumers` | Consumer group id. |
-| `CONSUMER_LOG_LEVEL` | `INFO` | Consumer logging level. |
 
 ## Topics
 

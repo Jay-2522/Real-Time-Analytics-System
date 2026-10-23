@@ -310,39 +310,6 @@ services:
     networks:
     - messaging
     - monitoring
-  telemetry-consumer:
-    profiles:
-    - workers
-    build:
-      context: ../..
-      dockerfile: deploy/hardened/worker.Dockerfile
-      target: runtime
-      args:
-        SERVICE: kafka-producers
-    user: 10001:10001
-    read_only: true
-    tmpfs:
-    - /tmp
-    cap_drop:
-    - ALL
-    security_opt:
-    - no-new-privileges:true
-    restart: unless-stopped
-    environment:
-      ENVIRONMENT: production
-      SERVICE_SECURITY_FILE: /run/security/security.json
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_CONSUMER_GROUP: consumer-hardened
-    command:
-    - python
-    - -m
-    - app.main
-    - consumer
-    volumes:
-    - ${HARDENED_SECRETS_DIR:?required}/consumer:/run/security:ro
-    networks:
-    - messaging
-    - monitoring
   ml-inference:
     profiles:
     - workers

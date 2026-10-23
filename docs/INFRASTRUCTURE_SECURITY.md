@@ -173,7 +173,6 @@ These are the captured **original image** counts; image tags can change.
 | streaming_analytics_system-frontend | 2 | 79 |
 | streaming_analytics_system-ml-inference | 1 | 114 |
 | streaming_analytics_system-storage-sink | 0 | 50 |
-| streaming_analytics_system-telemetry-consumer | 0 | 50 |
 | streaming_analytics_system-telemetry-producer | 0 | 50 |
 | streaming_analytics_system-threat-intelligence-engine | 0 | 50 |
 
@@ -219,7 +218,6 @@ Migration of the preserved worker is explicitly deferred and remains a blocker.
 | soc-hardened-postgres | 0 | 0 |
 | soc-hardened-redis | 0 | 0 |
 | soc-hardened-telemetry-producer | 0 | 44 |
-| soc-hardened-telemetry-consumer | 0 | 44 |
 | soc-hardened-ml-inference | 0 | 44 |
 | soc-hardened-storage-sink | 0 | 44 |
 | soc-hardened-alert-engine | 0 | 44 |

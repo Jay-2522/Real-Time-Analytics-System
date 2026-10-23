@@ -29,7 +29,6 @@ flowchart LR
         Z["Zookeeper"]
         K["Kafka"]
         P["Telemetry Producer"]
-        C["Telemetry Consumer"]
     end
     subgraph Processing
         SM["Spark Master"]
@@ -54,7 +53,6 @@ flowchart LR
         GF["Grafana"]
     end
     P --> K
-    K --> C
     K --> SJ
     SJ --> K
     K --> ML

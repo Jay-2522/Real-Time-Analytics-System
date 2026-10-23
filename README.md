@@ -359,7 +359,6 @@ Example metrics endpoints:
 | Storage Sink | `http://localhost:9102/metrics` |
 | Alert Engine | `http://localhost:9103/metrics` |
 | Telemetry Producer | `http://localhost:9104/metrics` |
-| Telemetry Consumer | `http://localhost:9105/metrics` |
 | Threat Intelligence | `http://localhost:9106/metrics` |
 
 ---

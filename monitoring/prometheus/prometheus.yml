@@ -30,10 +30,6 @@ scrape_configs:
     static_configs:
       - targets: ["streaming-analytics-producer:9104"]
 
-  - job_name: telemetry-consumer
-    static_configs:
-      - targets: ["streaming-analytics-consumer:9105"]
-
   - job_name: threat-intelligence-engine
     static_configs:
       - targets: ["streaming-analytics-threat-intelligence-engine:9106"]

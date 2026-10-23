@@ -24,7 +24,6 @@ Python services
 | Storage sink metrics | `streaming-analytics-storage-sink` | `http://localhost:9102/metrics` |
 | Alert engine metrics | `streaming-analytics-alert-engine` | `http://localhost:9103/metrics` |
 | Producer metrics | `streaming-analytics-producer` | `http://localhost:9104/metrics` |
-| Consumer metrics | `streaming-analytics-consumer` | `http://localhost:9105/metrics` |
 
 Grafana default login:
 
@@ -41,7 +40,6 @@ Prometheus is configured in `monitoring/prometheus/prometheus.yml` and scrapes:
 - `storage-sink`
 - `alert-engine`
 - `telemetry-producer`
-- `telemetry-consumer`
 - `prometheus`
 
 Open target status at:
@@ -151,7 +149,6 @@ curl http://localhost:9101/metrics
 curl http://localhost:9102/metrics
 curl http://localhost:9103/metrics
 curl http://localhost:9104/metrics
-curl http://localhost:9105/metrics
 ```
 
 Verify monitoring APIs:

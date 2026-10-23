@@ -22,5 +22,3 @@ TOPICS: tuple[TopicDefinition, ...] = (
     TopicDefinition(ANOMALY_EVENTS, 2, 1, "Injected anomaly signals for downstream detection workflows."),
     TopicDefinition(DEADLETTER_EVENTS, 1, 1, "Malformed or unprocessable telemetry messages."),
 )
-
-CONSUMER_TOPICS = (LOGIN_EVENTS, API_EVENTS, NETWORK_EVENTS, ANOMALY_EVENTS)

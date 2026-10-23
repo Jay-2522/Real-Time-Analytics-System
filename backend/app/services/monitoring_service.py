@@ -62,7 +62,6 @@ class MonitoringService:
             ("storage-sink", "Storage Sink", "storage", "http://localhost:9102/metrics"),
             ("alert-engine", "Alert Engine", "security", "http://localhost:9103/metrics"),
             ("telemetry-producer", "Kafka Producer", "streaming", "http://localhost:9104/metrics"),
-            ("telemetry-consumer", "Kafka Consumer", "streaming", "http://localhost:9105/metrics"),
             ("threat-intelligence-engine", "Threat Intelligence Engine", "security", "http://localhost:9106/metrics"),
             ("prometheus", "Prometheus", "observability", "http://localhost:9090"),
         ]

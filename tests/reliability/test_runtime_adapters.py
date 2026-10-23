@@ -17,26 +17,6 @@ def load(service,module):
     return importlib.import_module(module)
 
 
-def test_telemetry_deadletter_requires_confirmation():
-    module=load('kafka-producers','app.consumers.telemetry_consumer')
-    consumer=module.TelemetryConsumer(SimpleNamespace(deadletter_topic='dlq'))
-    class FailedProducer:
-        def produce(self,**kw):self.callback=kw['callback']
-        def flush(self,timeout):self.callback(RuntimeError('broker down'),None);return 0
-    consumer._deadletter_producer=FailedProducer()
-    with pytest.raises(RuntimeError,match='unconfirmed'):
-        consumer._handle_message('input',b'not-json',{'partition':0,'offset':5})
-    payloads=[]
-    class ConfirmedProducer:
-        def produce(self,**kw):
-            payloads.append(kw['value']);self.callback=kw['callback']
-        def flush(self,timeout):self.callback(None,None);return 0
-    consumer._deadletter_producer=ConfirmedProducer()
-    for _ in range(2):
-        consumer._handle_message('input',b'not-json',{'partition':0,'offset':5},1_700_000_000_000)
-    assert payloads[0]==payloads[1], 'A replay must retain identity and timestamp'
-
-
 def test_synthetic_producer_does_not_report_unconfirmed_publication():
     module=load('kafka-producers','app.producers.telemetry_producer')
     producer=module.TelemetryProducer(SimpleNamespace(anomaly_rate=.1))

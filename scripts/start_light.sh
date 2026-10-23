@@ -12,7 +12,6 @@ base_services=(
   backend
   frontend
   telemetry-producer
-  telemetry-consumer
 )
 
 intelligence_services=(

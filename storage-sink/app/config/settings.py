@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class StorageSinkSettings(BaseSettings):
     kafka_bootstrap_servers: str = Field(default="localhost:9092", validation_alias="KAFKA_BOOTSTRAP_SERVERS")
     kafka_consumer_group: str = Field(default="streaming-analytics-storage-sink", validation_alias="STORAGE_SINK_CONSUMER_GROUP")
+    deadletter_topic: str = Field(default="telemetry.deadletter.events", validation_alias="DEADLETTER_TOPIC")
     storage_sink_log_level: str = Field(default="INFO", validation_alias="STORAGE_SINK_LOG_LEVEL")
 
     postgres_host: str = Field(default="localhost", validation_alias="POSTGRES_HOST")

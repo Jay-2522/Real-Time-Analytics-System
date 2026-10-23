@@ -31,7 +31,7 @@ def get(url,username=None,password=None):
  return json.load(urllib.request.urlopen(request,timeout=10))
 
 credentials=section('prometheus')
-expected={'backend','telemetry-producer','telemetry-consumer','ml-inference','storage-sink','alert-engine','threat-intelligence-engine','spark-driver'}
+expected={'backend','telemetry-producer','ml-inference','storage-sink','alert-engine','threat-intelligence-engine','spark-driver'}
 deadline=time.monotonic()+90
 while time.monotonic()<deadline:
  rows=get('http://prometheus:9090/api/v1/query?query=up',**credentials)['data']['result']
@@ -48,7 +48,7 @@ source=next(s for s in sources if s['type']=='prometheus')
 assert source['url']=='http://prometheus:9090' and source['basicAuth']
 rows=get('http://grafana:3000/api/datasources/proxy/uid/'+source['uid']+'/api/v1/query?query=up','admin',password)['data']['result']
 assert {r['metric']['job'] for r in rows if r['value'][1]=='1'}==expected
-print('All eight configured targets scrape; authenticated Grafana queries the provisioned datasource; anonymous monitoring API access denied.')
+print('All seven configured targets scrape; authenticated Grafana queries the provisioned datasource; anonymous monitoring API access denied.')
 ''')
     assert result.returncode==0, 'Authenticated scrape/Grafana verification failed'
 

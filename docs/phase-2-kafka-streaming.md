@@ -28,7 +28,6 @@ Validated Streaming Telemetry
 | `streaming-analytics-kafka` | Kafka broker with internal and external listeners. |
 | `streaming-analytics-kafka-init` | Creates Phase 2 topics at startup. |
 | `streaming-analytics-producer` | Generates and publishes validated telemetry events. |
-| `streaming-analytics-consumer` | Consumes, validates, and logs telemetry events. |
 
 ## Kafka Connectivity
 
@@ -54,7 +53,7 @@ All generated events are validated with Pydantic before publishing. The runtime 
 - Discriminated event types.
 - Strict schemas with extra fields rejected.
 - JSON serialization for Kafka payloads.
-- Dead-letter wrapping for invalid records.
+- Storage-sink dead-letter publication for invalid Kafka records.
 
 ## Run Locally
 
@@ -74,12 +73,6 @@ Inspect producer output:
 docker logs streaming-analytics-producer --tail 100
 ```
 
-Inspect consumer output:
-
-```bash
-docker logs streaming-analytics-consumer --tail 100
-```
-
 List topics from the Kafka container:
 
 ```bash
@@ -95,15 +88,9 @@ Producer settings:
 - `ANOMALY_RATE`
 - `PRODUCER_LOG_LEVEL`
 
-Consumer settings:
-
-- `KAFKA_BOOTSTRAP_SERVERS`
-- `KAFKA_CONSUMER_GROUP`
-- `CONSUMER_LOG_LEVEL`
-
 ## Troubleshooting
 
-If producer or consumer containers restart, check Kafka readiness first:
+If the producer container restarts, check Kafka readiness first:
 
 ```bash
 docker logs streaming-analytics-kafka --tail 100

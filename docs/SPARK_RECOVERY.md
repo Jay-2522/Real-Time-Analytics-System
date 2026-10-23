@@ -193,8 +193,7 @@ Original stores use `streaming-analytics-postgres-data`,
 `streaming-analytics-kafka-data`, ZooKeeper data/log volumes, and retained
 Prometheus/Grafana volumes. Original topics include the four `telemetry.*.events`
 sources, four `analytics.*` products, `ml.anomaly.predictions` and the DLQ.
-Existing application groups include `streaming-analytics-telemetry-consumers`,
-`streaming-analytics-ml-inference`, `streaming-analytics-storage-sink`,
+Existing application groups include `streaming-analytics-ml-inference`, `streaming-analytics-storage-sink`,
 `streaming-analytics-alert-engine` and `streaming-analytics-threat-intelligence`,
 plus retained `reliability-*` test groups. Group listing was read-only; none was
 reset. The original producer continues its pre-existing operation independently.
