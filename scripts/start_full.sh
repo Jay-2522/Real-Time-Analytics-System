@@ -18,5 +18,5 @@ fi
 
 echo "Starting full Streaming Analytics AI SOC platform..."
 echo "Using Compose command: ${COMPOSE[*]}"
-"${COMPOSE[@]}" up --build -d --wait --wait-timeout 300
+"${COMPOSE[@]}" up -d --wait --wait-timeout 300
 python3 scripts/health_check.py
