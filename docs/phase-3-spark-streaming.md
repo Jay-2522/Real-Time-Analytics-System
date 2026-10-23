@@ -32,8 +32,6 @@ Spark UI endpoints:
 - Spark Worker UI: `http://localhost:8082`
 - Spark Driver / Jobs UI: `http://localhost:4040`
 
-Kafka UI remains available at `http://localhost:8080`.
-
 ## Kafka Inputs
 
 Spark consumes these telemetry topics:

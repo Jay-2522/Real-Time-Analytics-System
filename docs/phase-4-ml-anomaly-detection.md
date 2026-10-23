@@ -162,8 +162,6 @@ docker exec streaming-analytics-kafka kafka-console-consumer \
   --timeout-ms 30000
 ```
 
-Kafka UI is available at `http://localhost:8080`.
-
 ## Operational Notes
 
 - Inference uses `auto.offset.reset=earliest` so local development can score existing analytics messages after startup.

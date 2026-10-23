@@ -31,7 +31,7 @@ Before permitted source edits, 338 files were inventoried (excluding dependency 
 | Storage | `storage-sink/app/main.py`; raw telemetry, analytics, features, risks, predictions → PostgreSQL, then Elasticsearch and Redis | Kafka, PostgreSQL JSONB/upserts, Elasticsearch, Redis |
 | Alert engine | `alert-engine/app/main.py`; rules, Redis cooldown, incident correlation, PostgreSQL and Elasticsearch writes | prediction/enriched/risk Kafka topics, PostgreSQL, Redis, Elasticsearch |
 | Threat intelligence | `threat-intelligence-engine/app/main.py`; static IOC lists, seven YAML keyword/risk/country rules, heuristic MITRE mapping, entity/timeline persistence | five Kafka topics, PostgreSQL, Redis, Elasticsearch, PyYAML |
-| Infrastructure | 20 Compose services including one-shot topic initializer, ZooKeeper, Kafka UI, three Spark services, data stores, applications, Prometheus/Grafana | Local container engine; named persistent volumes |
+| Infrastructure | Compose services include one-shot topic initialization, ZooKeeper, Kafka, three Spark services, data stores, applications, Prometheus and optional Grafana | Local container engine; named persistent volumes |
 
 ### Actual data flow
 
@@ -127,7 +127,6 @@ Final full startup used `docker compose pull --ignore-buildable`, `docker compos
 | zookeeper | PASS | Container healthcheck healthy; broker connects and serves metadata |
 | kafka | PASS | Healthy; all 10 expected topics listed; controlled publish acknowledged at partition 0/offset 3 |
 | kafka-init | PASS | Completed with exit 0, all ten topics present; intentionally exited one-shot service |
-| kafka-ui | PASS | `/actuator/health` HTTP 200, `status=UP`; broker has active traffic |
 | postgres | PASS | Healthy; application writes and direct SQL queries returned controlled telemetry, prediction, alerts and incident links; published host port 15432 |
 | redis | PASS | `redis-cli ping` → PONG; application cooldown/cache initialized; application metrics/persistence active |
 | elasticsearch | PASS (local single-node) | Healthy container; writes and exact known-entity API/browser search succeed. Cluster is yellow with unassigned replicas on one node; no HA claim |

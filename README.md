@@ -128,7 +128,6 @@ For deeper diagrams, see [docs/architecture.md](docs/architecture.md).
 | --- | --- |
 | Apache Kafka | Event streaming backbone |
 | Zookeeper | Kafka coordination |
-| Kafka UI | Local topic inspection |
 | Python Kafka clients | Producers, consumers, sink workers |
 
 ### AI/ML
