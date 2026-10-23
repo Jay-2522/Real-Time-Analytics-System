@@ -7,6 +7,8 @@ tactic: Command and Control
 technique: Application Layer Protocol
 mitre_id: T1071
 conditions:
-  keywords: [beacon, periodic, dns, c2, command control]
+  field_equals:
+    event_type: [network]
+    port: [53]
   min_risk_score: 58
 score: 78

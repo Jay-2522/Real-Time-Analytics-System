@@ -7,6 +7,8 @@ tactic: Lateral Movement
 technique: Remote Services
 mitre_id: T1021
 conditions:
-  keywords: [lateral, rdp, smb, admin_share, remote service]
+  field_equals:
+    event_type: [network]
+    port: [22, 445, 3389, 5985, 5986]
   min_risk_score: 60
 score: 86

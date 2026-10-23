@@ -7,6 +7,7 @@ tactic: Execution
 technique: Command and Scripting Interpreter
 mitre_id: T1059
 conditions:
-  keywords: [process, powershell, cmd, shell, execution]
+  field_contains:
+    process_name: [powershell, cmd, shell]
   min_risk_score: 60
 score: 80

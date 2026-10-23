@@ -34,24 +34,37 @@ class DetectionRuleEngine:
         logger.info("detection_rules_loaded count=%s path=%s", len(rules), self._rules_path)
 
     def evaluate(self, payload: dict[str, Any], risk_score: float) -> list[RuleHit]:
-        text = str(payload).lower()
-        country = str(payload.get("country") or payload.get("geo_country") or "")
         hits: list[RuleHit] = []
         for rule in self._rules:
             rule_id = str(rule["id"])
             conditions = rule.get("conditions", {})
-            keywords = [str(keyword).lower() for keyword in conditions.get("keywords", [])]
             min_risk = float(conditions.get("min_risk_score", 0))
-            countries = set(conditions.get("countries", []))
-            matched = risk_score >= min_risk and (not keywords or any(keyword in text for keyword in keywords))
-            if countries and country not in countries:
-                matched = False
+            matched = risk_score >= min_risk and self._matches_fields(payload, conditions)
             DETECTION_RULE_EXECUTIONS_TOTAL.labels(rule_id, str(matched).lower()).inc()
             if matched:
                 hit = RuleHit(rule_id=rule_id, rule_name=rule["name"], severity=rule["severity"], tactic=rule["tactic"], technique=rule["technique"], mitre_id=rule["mitre_id"], score=float(rule.get("score", min_risk)))
                 hits.append(hit)
                 DETECTION_RULE_HITS_TOTAL.labels(rule_id, hit.severity).inc()
         return hits
+
+    @classmethod
+    def _matches_fields(cls, payload: dict[str, Any], conditions: dict[str, Any]) -> bool:
+        for field, expected in conditions.get("field_equals", {}).items():
+            values = expected if isinstance(expected, list) else [expected]
+            if not any(cls._equal(payload.get(field), value) for value in values):
+                return False
+        for field, expected in conditions.get("field_contains", {}).items():
+            values = expected if isinstance(expected, list) else [expected]
+            actual = payload.get(field)
+            if actual is None or not any(str(value).lower() in str(actual).lower() for value in values):
+                return False
+        return True
+
+    @staticmethod
+    def _equal(actual: Any, expected: Any) -> bool:
+        if isinstance(actual, str) and isinstance(expected, str):
+            return actual.casefold() == expected.casefold()
+        return actual == expected
 
     @staticmethod
     def _valid(rule: dict[str, Any]) -> bool:

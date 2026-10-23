@@ -32,16 +32,46 @@ tactic: Credential Access
 technique: Brute Force
 mitre_id: T1110
 conditions:
-  keywords: [credential]
+  field_equals:
+    event_type: [login]
+    login_success: [false]
   min_risk_score: 50
 score: 80
 """,
         encoding="utf-8",
     )
     module = load_threat_module("app.detections.rule_engine")
-    hits = module.DetectionRuleEngine(str(rules_dir)).evaluate({"message": "credential attack"}, 72)
+    hits = module.DetectionRuleEngine(str(rules_dir)).evaluate({"event_type": "login", "login_success": False}, 72)
     assert len(hits) == 1
     assert hits[0].mitre_id == "T1110"
+
+
+def test_unrelated_payload_text_does_not_trigger_structured_rules(tmp_path):
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir()
+    (rules_dir / "test.yaml").write_text(
+        """
+id: structured_rule
+name: Structured Rule
+description: test
+enabled: true
+severity: high
+tactic: Execution
+technique: Command and Scripting Interpreter
+mitre_id: T1059
+conditions:
+  field_contains:
+    process_name: [powershell]
+  min_risk_score: 1
+score: 80
+""",
+        encoding="utf-8",
+    )
+    module = load_threat_module("app.detections.rule_engine")
+    engine = module.DetectionRuleEngine(str(rules_dir))
+
+    assert engine.evaluate({"processed_at": "now", "feature_name": "powershell_login_rate"}, 99) == []
+    assert len(engine.evaluate({"process_name": "PowerShell.exe"}, 99)) == 1
 
 
 def test_threat_scoring_escalates_with_iocs_and_rules():
