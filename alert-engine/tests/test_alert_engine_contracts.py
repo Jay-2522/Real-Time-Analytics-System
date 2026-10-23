@@ -83,12 +83,9 @@ def test_code_rules_have_positive_and_negative_cases():
     assert "credential_attack" not in {alert.correlation_id.split(":", 1)[0] for alert in credential_negative}
 
 
-def test_deduplicator_emits_when_redis_unavailable():
-    settings_module = load_alert_module("app.config.settings")
-    dedup_module = load_alert_module("app.dedup.redis_deduplicator")
+def test_postgres_dedup_cache_suppresses_repeated_condition():
+    repository_module = load_alert_module("app.repositories.alert_repository")
     schema_module = load_alert_module("app.schemas.alerts")
-    settings = settings_module.AlertEngineSettings(redis_host="127.0.0.1", redis_port=1)
-    deduplicator = dedup_module.AlertDeduplicator(settings)
     alert = schema_module.AlertEvent(
         severity="high",
         title="Test",
@@ -102,7 +99,88 @@ def test_deduplicator_emits_when_redis_unavailable():
         tags=["test"],
         raw_payload={},
     )
-    assert deduplicator.should_emit(alert) is True
+
+    class FakeSession:
+        record = None
+
+        def scalar(self, _statement):
+            return self.record
+
+        def add(self, record):
+            self.record = record
+
+        def flush(self):
+            pass
+
+    session = FakeSession()
+    repository = repository_module.AlertRepository()
+    assert repository.should_emit(session, alert, 120) is True
+    assert repository.should_emit(session, alert, 120) is False
+    assert session.record.counter == 2
+
+
+def test_repeated_condition_produces_exactly_one_alert(monkeypatch):
+    service_module = load_alert_module("app.services.alert_service")
+    schema_module = load_alert_module("app.schemas.alerts")
+
+    class Rules:
+        @staticmethod
+        def evaluate(_source_topic, _payload):
+            return [
+                schema_module.AlertEvent(
+                    severity="high",
+                    title="Repeated condition",
+                    description="Repeated condition",
+                    entity_id="entity-1",
+                    event_type="login",
+                    source_topic="test",
+                    correlation_id="test_rule:entity-1",
+                    explanation="test",
+                    recommended_action="test",
+                    tags=["test"],
+                    raw_payload={},
+                )
+            ]
+
+    class Repository:
+        def __init__(self):
+            self.seen = set()
+            self.persisted = 0
+
+        def should_emit(self, _session, alert, _cooldown_seconds):
+            if alert.correlation_id in self.seen:
+                return False
+            self.seen.add(alert.correlation_id)
+            return True
+
+        def persist_alert(self, _session, _alert):
+            self.persisted += 1
+
+    class Session:
+        @staticmethod
+        def execute(*_args, **_kwargs):
+            pass
+
+    class Correlator:
+        @staticmethod
+        def correlate(_session, _alert):
+            return "incident-1"
+
+    repository = Repository()
+    monkeypatch.setattr(service_module, "claim", lambda *_args: True)
+    monkeypatch.setattr(service_module, "enqueue", lambda *_args: None)
+    service = service_module.AlertProcessingService(
+        rules=Rules(),
+        deduplicator=object(),
+        correlator=Correlator(),
+        repository=repository,
+        indexer=object(),
+        dedup_cooldown_seconds=120,
+    )
+
+    assert service.process(Session(), "test", {"event_id": "event-1"}) == 1
+    assert service.process(Session(), "test", {"event_id": "event-2"}) == 0
+    assert repository.persisted == 1
 
 
 def test_severity_escalation_rules():

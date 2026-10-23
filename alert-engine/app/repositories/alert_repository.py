@@ -1,5 +1,6 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -31,18 +32,32 @@ class AlertRepository:
         ).on_conflict_do_nothing(index_elements=["alert_id"])
         session.execute(statement)
 
-    def update_dedup_cache(self, session: Session, alert: AlertEvent) -> None:
+    def should_emit(self, session: Session, alert: AlertEvent, cooldown_seconds: int) -> bool:
         now = datetime.now(UTC)
-        statement = insert(AlertDedupCache).values(
-            dedup_key=f"{alert.correlation_id}:{alert.severity}",
-            alert_id=alert.alert_id,
-            entity_id=alert.entity_id,
-            counter=1,
-            first_seen=now,
-            last_seen=now,
-        ).on_conflict_do_update(
-            index_elements=["dedup_key"],
-            set_={"counter": AlertDedupCache.counter + 1, "last_seen": now, "alert_id": alert.alert_id},
+        record = session.scalar(
+            select(AlertDedupCache)
+            .where(AlertDedupCache.dedup_key == alert.correlation_id)
+            .with_for_update()
         )
-        session.execute(statement)
+        if record is None:
+            session.add(
+                AlertDedupCache(
+                    dedup_key=alert.correlation_id,
+                    alert_id=alert.alert_id,
+                    entity_id=alert.entity_id,
+                    counter=1,
+                    first_seen=now,
+                    last_seen=now,
+                )
+            )
+            session.flush()
+            return True
+
+        record.counter += 1
+        if record.last_seen >= now - timedelta(seconds=cooldown_seconds):
+            return False
+        record.alert_id = alert.alert_id
+        record.entity_id = alert.entity_id
+        record.last_seen = now
+        return True
 
