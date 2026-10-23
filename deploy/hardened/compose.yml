@@ -163,6 +163,7 @@ services:
     networks: [monitoring]
   grafana:
     <<: *restricted
+    profiles: [dashboards]
     image: grafana/grafana:12.4.13@sha256:41bbc1b5e04416f81891806076db2a2ff60a5d4da5f78d36a88b033a8c199185
     user: '472:472'
     read_only: true

@@ -50,7 +50,7 @@ flowchart LR
         API["FastAPI Backend"]
         UI["React Dashboard"]
         PR["Prometheus"]
-        GF["Grafana"]
+        GF["Grafana (optional profile)"]
     end
     P --> K
     K --> SJ
@@ -145,7 +145,7 @@ flowchart TD
 ```mermaid
 flowchart LR
     A["/metrics endpoints"] --> B["Prometheus"]
-    B --> C["Grafana Dashboards"]
+    B -. optional .-> C["Grafana Dashboards"]
     B --> D["FastAPI Monitoring APIs"]
     D --> E["React Observability Page"]
 ```

@@ -205,7 +205,7 @@ Platform health and monitoring page with service status, pipeline counters, metr
 
 ### Grafana Dashboard
 
-Local Grafana instance for operational dashboards and visual monitoring of the streaming analytics platform.
+Optional local Grafana instance for operational dashboards and visual monitoring of the streaming analytics platform.
 
 ![Grafana Dashboard](./screenshots/grafana-dashboard.png)
 
@@ -318,6 +318,12 @@ Unix/macOS/Linux:
 ./scripts/start_full.sh
 ```
 
+Grafana is off by default. Include the provisioned demo dashboards when needed:
+
+```bash
+./scripts/start_full.sh --dashboards
+```
+
 ### 5. Verify Health
 
 ```bash
@@ -345,8 +351,8 @@ Unix/macOS/Linux:
 
 The platform includes a local monitoring stack:
 
-- Prometheus scrapes backend, ML inference, storage sink, alert engine, telemetry producer/consumer, and threat intelligence metrics.
-- Grafana provisions local dashboards for system health, streaming pipeline, ML inference, SOC alerting, and threat intelligence.
+- Prometheus scrapes backend, ML inference, storage sink, alert engine, telemetry producer, and threat intelligence metrics.
+- Optional Grafana dashboards for system health, streaming pipeline, ML inference, SOC alerting, and threat intelligence run with the `dashboards` Compose profile.
 - FastAPI exposes monitoring APIs for dashboard integration.
 - `scripts/health_check.py` validates core service availability.
 

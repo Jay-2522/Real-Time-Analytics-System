@@ -71,7 +71,6 @@ class MonitoringService:
                 db_status,
                 redis_status,
                 elastic_status,
-                ServiceHealth(name="Grafana", status="healthy", detail="Provisioned locally at http://localhost:3000.", category="observability", endpoint="http://localhost:3000", last_checked=now),
                 ServiceHealth(name="Kafka", status="observing", detail="Kafka is monitored indirectly through pipeline throughput and service consumers.", category="streaming", endpoint="localhost:9092", last_checked=now),
                 self._spark_status(prometheus_targets, now),
                 ServiceHealth(name="Frontend", status="healthy", detail="React dashboard is served locally by the frontend container.", category="ui", endpoint="http://localhost:5173", last_checked=now),

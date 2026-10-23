@@ -31,7 +31,7 @@ export function ObservabilityPage() {
       <section className="rounded-lg border border-white/10 bg-surface-900 p-6 shadow-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-sm font-medium text-cyan-200">Local Prometheus + Grafana</p>
+            <p className="text-sm font-medium text-cyan-200">Local Prometheus + optional Grafana</p>
             <h1 className="mt-2 text-2xl font-semibold text-white">Observability</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-400">Production-style metrics for the free local streaming analytics stack, including API latency, pipeline throughput, ML inference, storage persistence, and SOC alerting.</p>
           </div>
@@ -40,7 +40,7 @@ export function ObservabilityPage() {
               Prometheus
             </a>
             <a className="rounded-md border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-100" href="http://localhost:3000" target="_blank" rel="noreferrer">
-              Grafana
+              Grafana (optional)
             </a>
           </div>
         </div>

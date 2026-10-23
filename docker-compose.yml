@@ -515,6 +515,7 @@ services:
       - streaming-analytics-network
 
   grafana:
+    profiles: ["dashboards"]
     container_name: streaming-analytics-grafana
     image: grafana/grafana:11.3.0
     environment:
