@@ -27,6 +27,12 @@ cleanup() {
   for container in "${PAUSED_CONTAINERS[@]:-}"; do
     docker unpause "$container" >/dev/null 2>&1 || true
   done
+  for container in "${PAUSED_CONTAINERS[@]:-}"; do
+    for _ in {1..30}; do
+      [[ $(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "$container" 2>/dev/null) == "healthy" ]] && break
+      sleep 1
+    done
+  done
   for pid in "${CONSUMER_PIDS[@]:-}"; do
     kill "$pid" >/dev/null 2>&1 || true
     wait "$pid" >/dev/null 2>&1 || true
