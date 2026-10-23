@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MOUNTS = ("backend/app", "frontend", "ml-models/artifacts", "monitoring")
+MOUNTS = ("backend/app", "frontend", "infrastructure_runtime", "migrations", "ml-models/artifacts", "monitoring")
 
 
 def main() -> None:
