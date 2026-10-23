@@ -2,6 +2,7 @@ import { Users } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { SeverityBadge } from "../components/ui/SeverityBadge";
+import { ApiError, EmptyState } from "../components/ui/DataState";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { threatIntelService } from "../services/threatIntelService";
 
@@ -10,6 +11,7 @@ export function EntitiesPage() {
   const selected = entities.data?.[0];
   return (
     <div className="space-y-6">
+      <ApiError errors={[entities.error]} />
       <section className="rounded-lg border border-white/10 bg-surface-900 p-6 shadow-panel">
         <p className="text-sm font-medium text-cyan-200">Entity Intelligence</p>
         <h1 className="mt-2 text-2xl font-semibold text-white">Risk Profiles</h1>
@@ -32,6 +34,7 @@ export function EntitiesPage() {
                 </div>
               </div>
             ))}
+            {entities.data && !entities.data.length ? <EmptyState /> : null}
           </div>
         </article>
         <article className="rounded-lg border border-white/10 bg-surface-900 p-5 shadow-panel">
@@ -52,7 +55,7 @@ export function EntitiesPage() {
               </div>
               <div className="mt-4 flex flex-wrap gap-2">{selected.tactics.map((tactic) => <span key={tactic} className="rounded-full bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">{tactic}</span>)}</div>
             </>
-          ) : <p className="text-sm text-slate-400">Entity profiles will appear after threat enrichment starts.</p>}
+          ) : <EmptyState className="mt-4" />}
         </article>
       </section>
     </div>

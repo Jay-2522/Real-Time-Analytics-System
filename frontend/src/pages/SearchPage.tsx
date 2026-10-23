@@ -8,16 +8,20 @@ export function SearchPage() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
-    setResults(await dashboardService.searchEvents(query));
-    setLoading(false);
+    setError(false);
+    try { setResults(await dashboardService.searchEvents(query)); }
+    catch { setError(true); setResults([]); }
+    finally { setLoading(false); }
   }
 
   return (
     <div className="space-y-6">
+      {error ? <div role="alert" className="rounded-md border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-100">API unreachable</div> : null}
       <section className="rounded-lg border border-white/10 bg-surface-900 p-6 shadow-panel">
         <h1 className="text-2xl font-semibold text-white">Search Events</h1>
         <form onSubmit={submit} className="mt-5 flex flex-col gap-3 md:flex-row">

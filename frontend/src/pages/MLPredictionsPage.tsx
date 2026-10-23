@@ -1,4 +1,5 @@
 import { RecordsTable } from "../components/tables/RecordTables";
+import { ApiError } from "../components/ui/DataState";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { dashboardService } from "../services/dashboardService";
 
@@ -8,6 +9,7 @@ export function MLPredictionsPage() {
 
   return (
     <div className="space-y-6">
+      <ApiError errors={[predictions.error, highRisks.error]} />
       <Header title="ML Predictions" detail="Isolation Forest anomaly scores, confidence, severity, explanations, and feature payloads." />
       <RecordsTable title="Recent Predictions" records={predictions.data ?? []} />
       <RecordsTable title="High-Risk Prediction Queue" records={highRisks.data ?? []} />

@@ -2,6 +2,7 @@ import { Activity, AlertTriangle, BarChart3, DatabaseZap, Gauge, LineChart, Radi
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { MetricCard } from "../components/dashboard/MetricCard";
+import { ApiError, EmptyState } from "../components/ui/DataState";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { monitoringService } from "../services/monitoringService";
 
@@ -26,6 +27,7 @@ export function ObservabilityPage() {
 
   return (
     <div className="space-y-6">
+      <ApiError errors={[overview.error, services.error, pipeline.error, errors.error, metrics.error]} />
       <section className="rounded-lg border border-white/10 bg-surface-900 p-6 shadow-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -44,12 +46,12 @@ export function ObservabilityPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {overview.data ? <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Healthy Services" value={`${overview.data?.services_healthy ?? 0}/${overview.data?.services_total ?? 0}`} detail="Prometheus targets and local dependency checks." icon={Server} tone="emerald" />
         <MetricCard label="Pipeline Events" value={overview.data?.total_events ?? 0} detail="Persisted telemetry event records." icon={RadioTower} tone="cyan" />
         <MetricCard label="ML Predictions" value={overview.data?.total_predictions ?? 0} detail="Stored anomaly prediction records." icon={Activity} tone="amber" />
         <MetricCard label="Open Incidents" value={overview.data?.open_incidents ?? 0} detail="SOC incidents still open or investigating." icon={AlertTriangle} tone={(overview.data?.open_incidents ?? 0) > 0 ? "red" : "emerald"} />
-      </section>
+      </section> : <EmptyState />}
 
       <section className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <article className="rounded-lg border border-white/10 bg-surface-900 p-5 shadow-panel">

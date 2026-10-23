@@ -1,5 +1,6 @@
 import { EventVolumeChart, RiskTrendChart, SeverityDistributionChart, TopEntitiesChart } from "../components/charts/DashboardCharts";
 import { TopEntitiesTable } from "../components/tables/RecordTables";
+import { ApiError } from "../components/ui/DataState";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { dashboardService } from "../services/dashboardService";
 
@@ -11,6 +12,7 @@ export function RiskAnalyticsPage() {
 
   return (
     <div className="space-y-6">
+      <ApiError errors={[riskTrends.error, eventVolume.error, severity.error, topEntities.error]} />
       <Header title="Risk Analytics" detail="Streaming risk posture, severity mix, event volume, and top risky entities." />
       <section className="grid gap-4 xl:grid-cols-2">
         <RiskTrendChart data={riskTrends.data ?? []} />

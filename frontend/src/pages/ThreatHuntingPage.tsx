@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Search, Target } from "lucide-react";
 
 import { SeverityBadge } from "../components/ui/SeverityBadge";
+import { ApiError, EmptyState } from "../components/ui/DataState";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { threatIntelService } from "../services/threatIntelService";
 
@@ -11,6 +12,7 @@ export function ThreatHuntingPage() {
   const iocs = useAsyncData(() => threatIntelService.iocs(12), [], 10_000);
   return (
     <div className="space-y-6">
+      <ApiError errors={[results.error, iocs.error]} />
       <section className="rounded-lg border border-white/10 bg-surface-900 p-6 shadow-panel">
         <p className="text-sm font-medium text-cyan-200">Investigation Workbench</p>
         <h1 className="mt-2 text-2xl font-semibold text-white">Threat Hunting</h1>
@@ -29,7 +31,7 @@ export function ThreatHuntingPage() {
                 <p className="mt-2 text-sm text-slate-300">{String(row.description ?? row.explanation ?? row.tactic ?? row.technique ?? "Threat intelligence match")}</p>
               </div>
             ))}
-            {!results.data?.length ? <p className="p-4 text-sm text-slate-400">No matches yet. As the threat engine enriches live data, hunting results will appear here.</p> : null}
+            {results.data && !results.data.length ? <EmptyState className="p-4" /> : null}
           </div>
           <aside className="rounded-md border border-white/10 p-4">
             <h2 className="flex items-center gap-2 font-semibold text-white"><Target size={18} /> IOC Pivots</h2>
@@ -40,6 +42,7 @@ export function ThreatHuntingPage() {
                   <SeverityBadge severity={ioc.severity} />
                 </button>
               ))}
+              {iocs.data && !iocs.data.length ? <EmptyState /> : null}
             </div>
           </aside>
         </div>

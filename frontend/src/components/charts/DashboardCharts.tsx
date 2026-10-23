@@ -1,6 +1,7 @@
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import type { ChartPoint, EntityRiskPoint } from "../../types/dashboard";
+import { EmptyState } from "../ui/DataState";
 
 const colors = ["#22d3ee", "#34d399", "#f59e0b", "#f97316", "#ef4444"];
 
@@ -14,6 +15,7 @@ function ChartFrame({ title, children }: { title: string; children: React.ReactN
 }
 
 export function RiskTrendChart({ data }: { data: ChartPoint[] }) {
+  if (!data.length) return <EmptyChart title="Risk Trend" />;
   return (
     <ChartFrame title="Risk Trend">
       <ResponsiveContainer>
@@ -30,6 +32,7 @@ export function RiskTrendChart({ data }: { data: ChartPoint[] }) {
 }
 
 export function EventVolumeChart({ data }: { data: ChartPoint[] }) {
+  if (!data.length) return <EmptyChart title="Event Volume" />;
   return (
     <ChartFrame title="Event Volume">
       <ResponsiveContainer>
@@ -46,6 +49,7 @@ export function EventVolumeChart({ data }: { data: ChartPoint[] }) {
 }
 
 export function SeverityDistributionChart({ data }: { data: ChartPoint[] }) {
+  if (!data.length) return <EmptyChart title="Severity Distribution" />;
   return (
     <ChartFrame title="Severity Distribution">
       <ResponsiveContainer>
@@ -63,6 +67,7 @@ export function SeverityDistributionChart({ data }: { data: ChartPoint[] }) {
 }
 
 export function TopEntitiesChart({ data }: { data: EntityRiskPoint[] }) {
+  if (!data.length) return <EmptyChart title="Top Risky Entities" />;
   return (
     <ChartFrame title="Top Risky Entities">
       <ResponsiveContainer>
@@ -76,5 +81,9 @@ export function TopEntitiesChart({ data }: { data: EntityRiskPoint[] }) {
       </ResponsiveContainer>
     </ChartFrame>
   );
+}
+
+function EmptyChart({ title }: { title: string }) {
+  return <ChartFrame title={title}><div className="grid h-full place-items-center"><EmptyState /></div></ChartFrame>;
 }
 

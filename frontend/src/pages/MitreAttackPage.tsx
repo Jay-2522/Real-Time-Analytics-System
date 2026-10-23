@@ -1,5 +1,6 @@
 import { Crosshair } from "lucide-react";
 
+import { ApiError, EmptyState } from "../components/ui/DataState";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { threatIntelService } from "../services/threatIntelService";
 
@@ -9,6 +10,7 @@ export function MitreAttackPage() {
   const activeByTactic = new Map((active.data ?? []).map((item) => [item.tactic, item]));
   return (
     <div className="space-y-6">
+      <ApiError errors={[tactics.error, active.error]} />
       <section className="rounded-lg border border-white/10 bg-surface-900 p-6 shadow-panel">
         <p className="text-sm font-medium text-cyan-200">ATT&CK Coverage</p>
         <h1 className="mt-2 text-2xl font-semibold text-white">MITRE ATT&CK Matrix</h1>
@@ -33,6 +35,7 @@ export function MitreAttackPage() {
           );
         })}
       </section>
+      {tactics.data && !tactics.data.length ? <EmptyState /> : null}
     </div>
   );
 }

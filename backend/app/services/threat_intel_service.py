@@ -1,8 +1,12 @@
 from __future__ import annotations
 from infrastructure_runtime.security import elasticsearch_options
 
+import json
+import logging
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 from elasticsearch import Elasticsearch
 from sqlalchemy import desc, func, or_, select
@@ -11,6 +15,8 @@ from sqlalchemy.orm import Session
 from app.core.settings import settings
 from app.db.models import AttackTimeline, DetectionRuleHit, EntityProfile, IOCMatch, ThreatIntelEvent
 from app.services.mitre_mapper import MitreMapper
+
+logger = logging.getLogger(__name__)
 
 
 class ThreatIntelQueryService:
@@ -95,6 +101,29 @@ class ThreatIntelQueryService:
             .order_by(desc(func.count()))
         ).all()
         return [{"rule_id": row[0], "name": row[1], "severity": row[2], "enabled": True, "hit_count": int(row[3]), "avg_score": round(float(row[4] or 0), 2)} for row in rows]
+
+    def loaded_detection_rules(self) -> list[dict[str, Any]]:
+        url = f"{settings.prometheus_url.rstrip('/')}/api/v1/query?{urlencode({'query': 'detection_rule_loaded == 1'})}"
+        try:
+            with urlopen(Request(url), timeout=2) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            logger.info("loaded_detection_rules_unavailable error=%s", exc)
+            raise RuntimeError("Detection rule runtime signal unavailable") from exc
+        rows = payload.get("data", {}).get("result", []) if payload.get("status") == "success" else []
+        return sorted(
+            [
+                {
+                    "rule_id": row.get("metric", {}).get("rule_id", ""),
+                    "name": row.get("metric", {}).get("rule_name", ""),
+                    "severity": row.get("metric", {}).get("severity", ""),
+                    "enabled": True,
+                }
+                for row in rows
+                if row.get("metric", {}).get("rule_id")
+            ],
+            key=lambda rule: rule["rule_id"],
+        )
 
     def detection_rule(self, db: Session, rule_id: str) -> dict[str, Any] | None:
         hits = list(db.scalars(select(DetectionRuleHit).where(DetectionRuleHit.rule_id == rule_id).order_by(desc(DetectionRuleHit.timestamp)).limit(50)))
