@@ -187,3 +187,62 @@ def test_severity_escalation_rules():
     correlator_module = load_alert_module("app.incidents.correlator")
     assert correlator_module.IncidentCorrelator._escalate("medium", "medium", 3) == "high"
     assert correlator_module.IncidentCorrelator._escalate("high", "high", 3) == "critical"
+
+
+def test_incident_groups_different_rules_for_same_entity():
+    settings_module = load_alert_module("app.config.settings")
+    correlator_module = load_alert_module("app.incidents.correlator")
+    schema_module = load_alert_module("app.schemas.alerts")
+
+    class ScalarResult:
+        def __init__(self, value):
+            self.value = value
+
+        def first(self):
+            return self.value
+
+    class Session:
+        incident = None
+        links = []
+
+        def execute(self, *_args, **_kwargs):
+            pass
+
+        def scalars(self, _statement):
+            return ScalarResult(self.incident)
+
+        def add(self, value):
+            if isinstance(value, correlator_module.Incident):
+                self.incident = value
+            else:
+                self.links.append(value)
+
+        def flush(self):
+            pass
+
+    def alert(alert_id, rule_id):
+        return schema_module.AlertEvent(
+            alert_id=alert_id,
+            severity="medium",
+            title="Test",
+            description="Test",
+            entity_id="feature-window-1",
+            event_type="login",
+            source_topic="test",
+            correlation_id=f"{rule_id}:feature-window-1",
+            explanation="test",
+            recommended_action="test",
+            tags=["test"],
+            raw_payload={"source_ip": "10.0.0.8"},
+        )
+
+    session = Session()
+    correlator = correlator_module.IncidentCorrelator(settings_module.AlertEngineSettings())
+    first_id = correlator.correlate(session, alert("alert-1", "rule-a"))
+    second_id = correlator.correlate(session, alert("alert-2", "rule-b"))
+
+    assert first_id == second_id
+    assert session.incident.event_count == 2
+    assert session.incident.related_alerts == ["alert-1", "alert-2"]
+    assert session.incident.entity_ids == ["10.0.0.8"]
+    assert session.incident.raw_payload["correlation_ids"] == ["rule-a:feature-window-1", "rule-b:feature-window-1"]
