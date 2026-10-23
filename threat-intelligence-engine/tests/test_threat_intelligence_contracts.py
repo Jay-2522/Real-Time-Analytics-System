@@ -74,6 +74,58 @@ score: 80
     assert len(engine.evaluate({"process_name": "PowerShell.exe"}, 99)) == 1
 
 
+def test_each_repository_rule_has_an_honest_positive_and_negative_case():
+    module = load_threat_module("app.detections.rule_engine")
+    rules_path = Path(__file__).resolve().parents[2] / "detections" / "rules"
+    engine = module.DetectionRuleEngine(str(rules_path))
+
+    dns_positive = {"event_type": "network", "port": 53, "source_ip": "10.0.0.1", "destination_ip": "8.8.8.8"}
+    dns_negative = {"event_type": "network", "port": 443, "processed_at": "login process"}
+    assert "high_risk_dns_activity" in {hit.rule_id for hit in engine.evaluate(dns_positive, 70)}
+    assert "high_risk_dns_activity" not in {hit.rule_id for hit in engine.evaluate(dns_negative, 99)}
+
+    brute_engine = module.DetectionRuleEngine(str(rules_path))
+    for second in range(4):
+        hits = brute_engine.evaluate(
+            {"event_type": "login", "login_success": False, "source_ip": "10.0.0.5", "timestamp": f"2026-01-01T00:00:0{second}Z"},
+            10,
+        )
+        assert "brute_force_detection" not in {hit.rule_id for hit in hits}
+    hits = brute_engine.evaluate(
+        {"event_type": "login", "login_success": False, "source_ip": "10.0.0.5", "timestamp": "2026-01-01T00:00:04Z"},
+        10,
+    )
+    assert "brute_force_detection" in {hit.rule_id for hit in hits}
+    success_hits = brute_engine.evaluate(
+        {"event_type": "login", "login_success": True, "source_ip": "10.0.0.5", "timestamp": "2026-01-01T00:00:05Z"},
+        99,
+    )
+    assert "brute_force_detection" not in {hit.rule_id for hit in success_hits}
+
+    geo_positive = {"event_type": "login", "login_success": True, "country": "Russia"}
+    geo_negative = {"event_type": "login", "login_success": True, "country": "US"}
+    assert "high_risk_geo_login" in {hit.rule_id for hit in engine.evaluate(geo_positive, 60)}
+    assert "high_risk_geo_login" not in {hit.rule_id for hit in engine.evaluate(geo_negative, 99)}
+
+    lateral_positive = {"event_type": "network", "source_ip": "10.0.0.1", "destination_ip": "10.0.0.2", "port": 445}
+    lateral_negative = {"event_type": "network", "source_ip": "10.0.0.1", "destination_ip": "8.8.8.8", "port": 445}
+    assert "lateral_movement" in {hit.rule_id for hit in engine.evaluate(lateral_positive, 10)}
+    assert "lateral_movement" not in {hit.rule_id for hit in engine.evaluate(lateral_negative, 99)}
+
+    loaded = {rule["id"] for rule in engine._rules}
+    assert "impossible_travel" not in loaded
+    assert "suspicious_privilege_escalation" not in loaded
+    assert "suspicious_process_chain" not in loaded
+    for candidate, benign in (
+        ({"event_type": "anomaly", "anomaly_type": "impossible_travel"}, {"event_type": "login"}),
+        ({"event_type": "anomaly", "anomaly_type": "privilege_escalation"}, {"event_type": "api"}),
+        ({"process_name": "PowerShell.exe", "parent_process": "cmd.exe"}, {"processed_at": "PowerShell.exe"}),
+    ):
+        disabled_ids = {"impossible_travel", "suspicious_privilege_escalation", "suspicious_process_chain"}
+        assert not ({hit.rule_id for hit in engine.evaluate(candidate, 100)} & disabled_ids)
+        assert not ({hit.rule_id for hit in engine.evaluate(benign, 100)} & disabled_ids)
+
+
 def test_threat_scoring_escalates_with_iocs_and_rules():
     schemas = load_threat_module("app.schemas.threat")
     scorer_module = load_threat_module("app.scoring.threat_scorer")

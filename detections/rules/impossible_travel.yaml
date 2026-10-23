@@ -1,7 +1,8 @@
 id: impossible_travel
 name: Impossible Travel Login
-description: Detects login behavior inconsistent with normal geography.
-enabled: true
+description: Disabled because events do not contain two timestamped locations needed to calculate travel speed.
+enabled: false
+disabled_reason: Events lack previous location coordinates and a comparable timestamp.
 severity: medium
 tactic: Initial Access
 technique: Valid Accounts

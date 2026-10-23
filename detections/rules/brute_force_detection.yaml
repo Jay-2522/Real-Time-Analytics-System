@@ -1,6 +1,6 @@
 id: brute_force_detection
 name: Repeated Failed Authentication
-description: Detects repeated failed authentication and elevated credential risk.
+description: Detects five failed logins from one source IP within five minutes.
 enabled: true
 severity: high
 tactic: Credential Access
@@ -10,5 +10,8 @@ conditions:
   field_equals:
     event_type: [login]
     login_success: [false]
-  min_risk_score: 55
+  detector: failed_login_burst
+  threshold: 5
+  window_seconds: 300
+  min_risk_score: 0
 score: 82

@@ -34,7 +34,53 @@ def test_rule_engine_honors_positive_model_decision_below_score_threshold():
     )
     assert len(alerts) == 1
     assert alerts[0].severity == "medium"
-    assert alerts[0].title == "ML anomaly detected"
+    assert alerts[0].title == "Positive ML anomaly decision"
+    assert alerts[0].correlation_id.startswith("model_positive:")
+
+
+def test_code_rules_have_positive_and_negative_cases():
+    rule_module = load_alert_module("app.rules.rule_engine")
+    engine = rule_module.AlertRulesEngine()
+
+    high_positive = engine.evaluate("ml.anomaly.predictions", {"entity_id": "e1", "anomaly_score": 0.9})
+    high_negative = engine.evaluate("analytics.enriched.events", {"entity_id": "e1", "anomaly_score": 0.9})
+    assert "high_anomaly" in {alert.correlation_id.split(":", 1)[0] for alert in high_positive}
+    assert "high_anomaly" not in {alert.correlation_id.split(":", 1)[0] for alert in high_negative}
+
+    model_positive = engine.evaluate("ml.anomaly.predictions", {"entity_id": "e2", "is_anomaly": True, "anomaly_score": 0.2})
+    model_negative = engine.evaluate("ml.anomaly.predictions", {"entity_id": "e2", "is_anomaly": False, "anomaly_score": 0.2})
+    assert "model_positive" in {alert.correlation_id.split(":", 1)[0] for alert in model_positive}
+    assert "model_positive" not in {alert.correlation_id.split(":", 1)[0] for alert in model_negative}
+
+    api_positive = engine.evaluate("analytics.enriched.events", {"event_type": "api", "entity_id": "e3", "status_code": 503})
+    api_negative = engine.evaluate("analytics.enriched.events", {"event_type": "api", "entity_id": "e3", "status_code": 404})
+    assert "api_server_error" in {alert.correlation_id.split(":", 1)[0] for alert in api_positive}
+    assert "api_server_error" not in {alert.correlation_id.split(":", 1)[0] for alert in api_negative}
+
+    network_positive = engine.evaluate(
+        "analytics.enriched.events",
+        {"event_type": "network", "entity_id": "e4", "bytes_sent": 5_000_000, "bytes_received": 3_000_000},
+    )
+    network_negative = engine.evaluate(
+        "analytics.enriched.events",
+        {"event_type": "network", "entity_id": "e4", "bytes_sent": 500_000, "bytes_received": 300_000},
+    )
+    assert "large_network_transfer" in {alert.correlation_id.split(":", 1)[0] for alert in network_positive}
+    assert "large_network_transfer" not in {alert.correlation_id.split(":", 1)[0] for alert in network_negative}
+
+    risk_positive = engine.evaluate("analytics.risk.metrics", {"entity_id": "e5", "high_risk_event_count": 5})
+    risk_negative = engine.evaluate("analytics.risk.metrics", {"entity_id": "e5", "high_risk_event_count": 4})
+    assert "correlated_risk" in {alert.correlation_id.split(":", 1)[0] for alert in risk_positive}
+    assert "correlated_risk" not in {alert.correlation_id.split(":", 1)[0] for alert in risk_negative}
+
+    credential_positive_candidate = engine.evaluate(
+        "analytics.enriched.events", {"event_type": "login", "entity_id": "e6", "login_success": False}
+    )
+    credential_negative = engine.evaluate(
+        "analytics.enriched.events", {"event_type": "login", "entity_id": "e6", "login_success": True}
+    )
+    assert "credential_attack" not in {alert.correlation_id.split(":", 1)[0] for alert in credential_positive_candidate}
+    assert "credential_attack" not in {alert.correlation_id.split(":", 1)[0] for alert in credential_negative}
 
 
 def test_deduplicator_emits_when_redis_unavailable():

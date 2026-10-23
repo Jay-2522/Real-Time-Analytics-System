@@ -1,6 +1,6 @@
 id: lateral_movement
 name: Lateral Movement Pattern
-description: Detects remote service and east-west movement indicators.
+description: Detects a network connection between two private addresses over a remote administration service port.
 enabled: true
 severity: high
 tactic: Lateral Movement
@@ -9,6 +9,7 @@ mitre_id: T1021
 conditions:
   field_equals:
     event_type: [network]
-    port: [22, 445, 3389, 5985, 5986]
-  min_risk_score: 60
+  detector: private_remote_service
+  ports: [22, 445, 3389, 5985, 5986]
+  min_risk_score: 0
 score: 86

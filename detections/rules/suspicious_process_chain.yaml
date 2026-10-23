@@ -1,7 +1,8 @@
 id: suspicious_process_chain
 name: Suspicious Process Chain
-description: Detects suspicious command or scripting process chains.
-enabled: true
+description: Disabled because events do not contain process and parent-process data.
+enabled: false
+disabled_reason: Events lack process, parent process, and command-line fields.
 severity: high
 tactic: Execution
 technique: Command and Scripting Interpreter
