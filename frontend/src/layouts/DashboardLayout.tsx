@@ -12,14 +12,14 @@ const navigationItems = [
   { label: "Incidents", href: "/incidents", icon: FolderKanban },
   { label: "Threat Intel", href: "/threat-intelligence", icon: Crosshair },
   { label: "Detections", href: "/detection-engineering", icon: ShieldCheck },
-  { label: "Threat Hunting", href: "/threat-hunting", icon: GitBranch },
+  { label: "Threat Hunting", href: "/threat-hunting", icon: GitBranch, enabled: config.features.threatHunting },
   { label: "MITRE ATT&CK", href: "/mitre-attack", icon: Network },
   { label: "Entities", href: "/entities", icon: Users },
   { label: "Attack Timeline", href: "/attack-timeline", icon: Activity },
   { label: "Search", href: "/search", icon: Search },
-  { label: "System Health", href: "/health", icon: Server },
-  { label: "Observability", href: "/observability", icon: Gauge },
-];
+  { label: "System Health", href: "/health", icon: Server, enabled: config.features.systemHealth },
+  { label: "Observability", href: "/observability", icon: Gauge, enabled: config.features.observability },
+].filter((item) => item.enabled !== false);
 
 export function DashboardLayout() {
   const { user, logout } = useSession();

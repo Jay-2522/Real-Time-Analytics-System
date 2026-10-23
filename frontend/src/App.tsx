@@ -17,6 +17,7 @@ import { SearchPage } from "./pages/SearchPage";
 import { SystemHealthPage } from "./pages/SystemHealthPage";
 import { ThreatHuntingPage } from "./pages/ThreatHuntingPage";
 import { ThreatIntelligencePage } from "./pages/ThreatIntelligencePage";
+import { config } from "./config/environment";
 
 export default function App() {
   return (
@@ -27,13 +28,13 @@ export default function App() {
         <Route path="risk" element={<RiskAnalyticsPage />} />
         <Route path="predictions" element={<MLPredictionsPage />} />
         <Route path="search" element={<SearchPage />} />
-        <Route path="health" element={<SystemHealthPage />} />
+        {config.features.systemHealth ? <Route path="health" element={<SystemHealthPage />} /> : null}
         <Route path="alerts" element={<AlertsPage />} />
         <Route path="incidents" element={<IncidentsPage />} />
-        <Route path="observability" element={<ObservabilityPage />} />
+        {config.features.observability ? <Route path="observability" element={<ObservabilityPage />} /> : null}
         <Route path="threat-intelligence" element={<ThreatIntelligencePage />} />
         <Route path="detection-engineering" element={<DetectionEngineeringPage />} />
-        <Route path="threat-hunting" element={<ThreatHuntingPage />} />
+        {config.features.threatHunting ? <Route path="threat-hunting" element={<ThreatHuntingPage />} /> : null}
         <Route path="mitre-attack" element={<MitreAttackPage />} />
         <Route path="entities" element={<EntitiesPage />} />
         <Route path="attack-timeline" element={<AttackTimelinePage />} />
