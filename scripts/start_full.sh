@@ -3,11 +3,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 scripts/setup_local.py
 
-profile_args=()
-health_args=()
+include_dashboards=false
 if [[ "${1:-}" == "--dashboards" ]]; then
-  profile_args=(--profile dashboards)
-  health_args=(--include-grafana)
+  include_dashboards=true
   shift
 fi
 if [[ $# -ne 0 ]]; then
@@ -30,5 +28,10 @@ fi
 
 echo "Starting full Streaming Analytics AI SOC platform..."
 echo "Using Compose command: ${COMPOSE[*]}"
-"${COMPOSE[@]}" "${profile_args[@]}" up -d --wait --wait-timeout 300
-python3 scripts/health_check.py "${health_args[@]}"
+if [[ "$include_dashboards" == true ]]; then
+  "${COMPOSE[@]}" --profile dashboards up -d --wait --wait-timeout 300
+  python3 scripts/health_check.py --include-grafana
+else
+  "${COMPOSE[@]}" up -d --wait --wait-timeout 300
+  python3 scripts/health_check.py
+fi
