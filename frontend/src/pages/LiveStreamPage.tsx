@@ -1,4 +1,5 @@
 import { RecordsTable } from "../components/tables/RecordTables";
+import { ApiError } from "../components/ui/DataState";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { useDashboardWebSocket } from "../hooks/useDashboardWebSocket";
 import { dashboardService } from "../services/dashboardService";
@@ -12,6 +13,7 @@ export function LiveStreamPage() {
 
   return (
     <div className="space-y-6">
+      <ApiError errors={[events.error, predictions.error]} />
       <PageHeader title="Live Stream" detail="Auto-refreshing telemetry and ML predictions from the local streaming pipeline." status={live.status} />
       <RecordsTable title="Real-Time Event Feed" records={events.data ?? []} />
       <RecordsTable title="Latest ML Predictions" records={livePredictions.length ? livePredictions : predictions.data ?? []} />

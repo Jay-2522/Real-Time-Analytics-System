@@ -2,6 +2,7 @@ import { Clock3 } from "lucide-react";
 
 import { ThreatGraphPanel } from "../components/threat/ThreatGraphPanel";
 import { SeverityBadge } from "../components/ui/SeverityBadge";
+import { ApiError, EmptyState } from "../components/ui/DataState";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { threatIntelService } from "../services/threatIntelService";
 
@@ -10,6 +11,7 @@ export function AttackTimelinePage() {
   const active = timelines.data?.[0];
   return (
     <div className="space-y-6">
+      <ApiError errors={[timelines.error]} />
       <section className="rounded-lg border border-white/10 bg-surface-900 p-6 shadow-panel">
         <p className="text-sm font-medium text-cyan-200">Attack Chain Reconstruction</p>
         <h1 className="mt-2 text-2xl font-semibold text-white">Attack Timeline</h1>
@@ -28,11 +30,12 @@ export function AttackTimelinePage() {
                 <p className="mt-2 text-xs text-slate-500">{timeline.event_count} events · updated {new Date(timeline.updated_at).toLocaleString()}</p>
               </div>
             ))}
+            {timelines.data && !timelines.data.length ? <EmptyState /> : null}
           </div>
         </article>
         <article className="rounded-lg border border-white/10 bg-surface-900 p-5 shadow-panel">
           <h2 className="font-semibold text-white">Attack Path Visualization</h2>
-          {active ? <div className="mt-4"><ThreatGraphPanel graph={{ nodes: active.nodes.map((node) => ({ ...node, risk_score: node.score })), edges: active.edges }} /></div> : <p className="mt-4 text-sm text-slate-400">Attack timelines will appear after correlated enriched events are persisted.</p>}
+          {active ? <div className="mt-4"><ThreatGraphPanel graph={{ nodes: active.nodes.map((node) => ({ ...node, risk_score: node.score })), edges: active.edges }} /></div> : <EmptyState className="mt-4" />}
         </article>
       </section>
     </div>

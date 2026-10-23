@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer,
 import { MetricCard } from "../components/dashboard/MetricCard";
 import { ThreatGraphPanel } from "../components/threat/ThreatGraphPanel";
 import { SeverityBadge } from "../components/ui/SeverityBadge";
+import { ApiError, EmptyState } from "../components/ui/DataState";
 import { useAsyncData } from "../hooks/useAsyncData";
 import { threatIntelService } from "../services/threatIntelService";
 
@@ -18,18 +19,19 @@ export function ThreatIntelligencePage() {
 
   return (
     <div className="space-y-6">
+      <ApiError errors={[overview.error, iocs.error, entities.error, heatmap.error, graph.error]} />
       <section className="rounded-lg border border-cyan-400/20 bg-surface-900 p-6 shadow-panel">
         <p className="text-sm font-medium text-cyan-200">Phase 9 XDR Intelligence</p>
         <h1 className="mt-2 text-2xl font-semibold text-white">Threat Intelligence</h1>
         <p className="mt-2 text-sm text-slate-400">Live IOC enrichment, MITRE mapping, risk scoring, and entity correlation across the local AI SOC pipeline.</p>
       </section>
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      {overview.data ? <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard label="Enriched Events" value={overview.data?.total_enriched_events ?? 0} detail="Threat events processed." icon={Radar} />
         <MetricCard label="IOC Matches" value={overview.data?.ioc_matches ?? 0} detail="Local feed correlations." icon={Crosshair} tone="amber" />
         <MetricCard label="Rule Hits" value={overview.data?.rule_hits ?? 0} detail="Detection engineering matches." icon={ShieldAlert} tone="red" />
         <MetricCard label="High Risk Entities" value={overview.data?.high_risk_entities ?? 0} detail="Entities above risk 70." icon={AlertTriangle} tone="amber" />
         <MetricCard label="Timelines" value={overview.data?.active_timelines ?? 0} detail="Attack chains created." icon={Network} tone="emerald" />
-      </section>
+      </section> : <EmptyState />}
       <section className="grid gap-4 xl:grid-cols-[1.2fr_.8fr]">
         <motion.article initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-lg border border-white/10 bg-surface-900 p-5 shadow-panel">
           <h2 className="font-semibold text-white">Threat Relationship Graph</h2>
@@ -55,6 +57,7 @@ export function ThreatIntelligencePage() {
                 <span className="text-cyan-200">{entity.risk_score.toFixed(1)}</span>
               </div>
             ))}
+            {entities.data && !entities.data.length ? <EmptyState /> : null}
           </div>
         </article>
       </section>
@@ -85,6 +88,7 @@ export function ThreatIntelligencePage() {
                 <SeverityBadge severity={ioc.severity} />
               </div>
             ))}
+            {iocs.data && !iocs.data.length ? <EmptyState className="p-4" /> : null}
           </div>
         </article>
       </section>

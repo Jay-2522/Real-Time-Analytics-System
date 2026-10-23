@@ -1,6 +1,7 @@
 import { CheckCircle2, CircleAlert } from "lucide-react";
 
 import { useAsyncData } from "../hooks/useAsyncData";
+import { ApiError, EmptyState } from "../components/ui/DataState";
 import { dashboardService } from "../services/dashboardService";
 import { monitoringService } from "../services/monitoringService";
 
@@ -14,11 +15,13 @@ export function SystemHealthPage() {
 
   return (
     <div className="space-y-6">
+      <ApiError errors={[health.error, monitoringServices.error]} />
       <section className="rounded-lg border border-white/10 bg-surface-900 p-6 shadow-panel">
         <p className="text-sm font-medium text-cyan-200">{health.data?.status ?? "checking"}</p>
         <h1 className="mt-2 text-2xl font-semibold text-white">System Health</h1>
         <p className="mt-2 text-sm text-slate-400">Local service health for the free Docker Compose analytics platform.</p>
       </section>
+      {!components.length && !health.isLoading && !monitoringServices.isLoading ? <EmptyState /> : null}
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {components.map((component) => {
           const ok = ["healthy", "online", "active", "observing"].includes(component.status);
