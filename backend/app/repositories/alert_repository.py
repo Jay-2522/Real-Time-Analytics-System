@@ -6,7 +6,7 @@ from app.db.models import Alert, Incident
 
 class AlertRepository:
     def recent_alerts(self, db: Session, limit: int = 50) -> list[Alert]:
-        return list(db.scalars(select(Alert).order_by(desc(Alert.timestamp), desc(Alert.id)).limit(limit)))
+        return list(db.scalars(select(Alert).order_by(desc(Alert.created_at), desc(Alert.id)).limit(limit)))
 
     def alerts_by_severity(self, db: Session, severities: list[str], limit: int = 50) -> list[Alert]:
         return list(db.scalars(select(Alert).where(Alert.severity.in_(severities)).order_by(desc(Alert.timestamp)).limit(limit)))

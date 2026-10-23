@@ -56,7 +56,7 @@ class AlertQueryService:
             return []
 
     def live_message(self, db: Session):
-        recent = self.recent_alerts(db, 10)
+        recent = self.recent_alerts(db, 50)
         critical = self.critical_alerts(db, 10)
         incidents = self.recent_incidents(db, 10)
         stats = self.stats(db)

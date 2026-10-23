@@ -20,6 +20,23 @@ def test_rule_engine_generates_high_risk_alert():
     assert alerts[0].severity == "critical"
 
 
+def test_rule_engine_honors_positive_model_decision_below_score_threshold():
+    rule_module = load_alert_module("app.rules.rule_engine")
+    alerts = rule_module.AlertRulesEngine().evaluate(
+        "ml.anomaly.predictions",
+        {
+            "event_type": "feature_window",
+            "entity_id": "2001:db8::1",
+            "anomaly_score": 0.52,
+            "ml_risk_score": 52,
+            "is_anomaly": True,
+        },
+    )
+    assert len(alerts) == 1
+    assert alerts[0].severity == "medium"
+    assert alerts[0].title == "ML anomaly detected"
+
+
 def test_deduplicator_emits_when_redis_unavailable():
     settings_module = load_alert_module("app.config.settings")
     dedup_module = load_alert_module("app.dedup.redis_deduplicator")
