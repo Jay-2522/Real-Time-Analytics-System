@@ -21,9 +21,9 @@ export function ThreatIntelligencePage() {
     <div className="space-y-6">
       <ApiError errors={[overview.error, iocs.error, entities.error, heatmap.error, graph.error]} />
       <section className="rounded-lg border border-cyan-400/20 bg-surface-900 p-6 shadow-panel">
-        <p className="text-sm font-medium text-cyan-200">Phase 9 XDR Intelligence</p>
-        <h1 className="mt-2 text-2xl font-semibold text-white">Threat Intelligence</h1>
-        <p className="mt-2 text-sm text-slate-400">Live IOC enrichment, MITRE mapping, risk scoring, and entity correlation across the local AI SOC pipeline.</p>
+        <p className="text-sm font-medium text-cyan-200">Local demonstration enrichment</p>
+        <h1 className="mt-2 text-2xl font-semibold text-white">Threat Intelligence — Local Demonstration Data</h1>
+        <p className="mt-2 text-sm text-slate-400">Counts are derived from live pipeline events. IOC feeds, country watchlists, and ATT&amp;CK mappings are local demonstration data, not external intelligence feeds.</p>
       </section>
       {overview.data ? <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard label="Enriched Events" value={overview.data?.total_enriched_events ?? 0} detail="Threat events processed." icon={Radar} />

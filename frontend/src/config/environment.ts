@@ -1,4 +1,5 @@
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+const eventSource = import.meta.env.VITE_EVENT_SOURCE ?? "synthetic";
 
 function dashboardWebSocketUrl() {
   const configured = import.meta.env.VITE_DASHBOARD_WS_URL ?? import.meta.env.VITE_WS_BASE_URL;
@@ -22,6 +23,8 @@ function alertsWebSocketUrl() {
 
 export const config = {
   apiBaseUrl,
+  eventSource,
+  eventSourceLabel: eventSource === "synthetic" ? "Synthetic generator" : eventSource,
   dashboardWebSocketUrl: dashboardWebSocketUrl(),
   alertsWebSocketUrl: alertsWebSocketUrl(),
 };

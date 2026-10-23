@@ -1,6 +1,7 @@
 import { useSession } from "../auth/session";
 import { NavLink, Outlet } from "react-router-dom";
 import { Activity, BarChart3, Bell, BrainCircuit, Crosshair, FolderKanban, Gauge, GitBranch, LayoutDashboard, Network, Radio, Search, Server, ShieldCheck, Siren, Users } from "lucide-react";
+import { config } from "../config/environment";
 
 const navigationItems = [
   { label: "Overview", href: "/", icon: LayoutDashboard },
@@ -83,6 +84,9 @@ export function DashboardLayout() {
         </header>
 
         <main className="px-4 py-6 md:px-8">
+          <div className="mb-4 inline-flex rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-medium text-amber-100">
+            Event source: {config.eventSourceLabel}
+          </div>
           <Outlet />
         </main>
       </div>
