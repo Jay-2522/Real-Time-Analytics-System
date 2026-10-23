@@ -27,15 +27,12 @@ Validated Streaming Telemetry
 | `streaming-analytics-zookeeper` | Coordinates the local Kafka broker. |
 | `streaming-analytics-kafka` | Kafka broker with internal and external listeners. |
 | `streaming-analytics-kafka-init` | Creates Phase 2 topics at startup. |
-| `streaming-analytics-kafka-ui` | Browser-based Kafka topic and message inspection. |
 | `streaming-analytics-producer` | Generates and publishes validated telemetry events. |
-| `streaming-analytics-consumer` | Consumes, validates, and logs telemetry events. |
 
 ## Kafka Connectivity
 
 - Docker services use `streaming-analytics-kafka:29092`.
 - Local development tools use `localhost:9092`.
-- Kafka UI is exposed at `http://localhost:8080`.
 
 ## Topics
 
@@ -56,18 +53,12 @@ All generated events are validated with Pydantic before publishing. The runtime 
 - Discriminated event types.
 - Strict schemas with extra fields rejected.
 - JSON serialization for Kafka payloads.
-- Dead-letter wrapping for invalid records.
+- Storage-sink dead-letter publication for invalid Kafka records.
 
 ## Run Locally
 
 ```bash
 docker compose up --build -d
-```
-
-Open Kafka UI:
-
-```text
-http://localhost:8080
 ```
 
 Inspect running containers:
@@ -80,12 +71,6 @@ Inspect producer output:
 
 ```bash
 docker logs streaming-analytics-producer --tail 100
-```
-
-Inspect consumer output:
-
-```bash
-docker logs streaming-analytics-consumer --tail 100
 ```
 
 List topics from the Kafka container:
@@ -103,22 +88,14 @@ Producer settings:
 - `ANOMALY_RATE`
 - `PRODUCER_LOG_LEVEL`
 
-Consumer settings:
-
-- `KAFKA_BOOTSTRAP_SERVERS`
-- `KAFKA_CONSUMER_GROUP`
-- `CONSUMER_LOG_LEVEL`
-
 ## Troubleshooting
 
-If producer or consumer containers restart, check Kafka readiness first:
+If the producer container restarts, check Kafka readiness first:
 
 ```bash
 docker logs streaming-analytics-kafka --tail 100
 docker logs streaming-analytics-kafka-init
 ```
-
-If Kafka UI loads but topics are empty, wait a few seconds and refresh. The producer publishes continuously after the topic initializer exits successfully.
 
 If local tools cannot connect to Kafka, use `localhost:9092`. Docker containers should use `streaming-analytics-kafka:29092`.
 

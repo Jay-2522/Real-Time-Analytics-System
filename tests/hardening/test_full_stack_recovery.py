@@ -374,9 +374,9 @@ publish_confirmed(p,topic='telemetry.deadletter.events',key=key,value=wire,timeo
 print('Real failed confirmation, reconnection and duplicate redelivery verified')
 '''
     def flag(suffix,write=False):
-        return remote('telemetry-consumer',f'from pathlib import Path;p=Path("/tmp/{key}-{suffix}");'+('p.write_text("test")' if write else 'print(p.exists())')).strip()
+        return remote('telemetry-producer',f'from pathlib import Path;p=Path("/tmp/{key}-{suffix}");'+('p.write_text("test")' if write else 'print(p.exists())')).strip()
     with ThreadPoolExecutor(max_workers=1) as pool:
-        future=pool.submit(remote,'telemetry-consumer',script,120)
+        future=pool.submit(remote,'telemetry-producer',script,120)
         for _ in range(40):
             if flag('ready')=='True':break
             time.sleep(.5)

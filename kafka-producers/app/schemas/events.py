@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Literal, Union
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class BaseTelemetryEvent(BaseModel):
@@ -62,29 +62,7 @@ class AnomalyEvent(BaseTelemetryEvent):
     event_type: Literal["anomaly"] = "anomaly"
 
 
-class DeadLetterEvent(BaseModel):
-    event_id: UUID = Field(default_factory=uuid4)
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    source_topic: str
-    reason: str
-    payload: Any
-    event_type: Literal["deadletter"] = "deadletter"
-
-    model_config = ConfigDict(json_encoders={datetime: lambda value: value.isoformat(), UUID: str})
-
-    def to_json_bytes(self) -> bytes:
-        return self.model_dump_json().encode("utf-8")
-
-
 TelemetryEvent = Annotated[
     Union[LoginEvent, ApiEvent, NetworkEvent, AnomalyEvent],
     Field(discriminator="event_type"),
 ]
-
-telemetry_event_adapter = TypeAdapter(TelemetryEvent)
-
-
-def parse_telemetry_event(payload: str | bytes | bytearray) -> TelemetryEvent:
-    if isinstance(payload, (bytes, bytearray)):
-        payload = payload.decode("utf-8")
-    return telemetry_event_adapter.validate_json(payload)

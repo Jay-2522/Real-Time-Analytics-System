@@ -12,8 +12,7 @@ $baseServices = @(
   "redis",
   "backend",
   "frontend",
-  "telemetry-producer",
-  "telemetry-consumer"
+  "telemetry-producer"
 )
 
 $intelligenceServices = @(

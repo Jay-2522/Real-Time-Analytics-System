@@ -9,9 +9,6 @@ scrape_configs:
   - job_name: telemetry-producer
     static_configs:
       - targets: ['telemetry-producer:9104']
-  - job_name: telemetry-consumer
-    static_configs:
-      - targets: ['telemetry-consumer:9105']
   - job_name: ml-inference
     static_configs:
       - targets: ['ml-inference:9101']

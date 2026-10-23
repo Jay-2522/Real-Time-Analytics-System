@@ -62,7 +62,6 @@ class MonitoringService:
             ("storage-sink", "Storage Sink", "storage", "http://localhost:9102/metrics"),
             ("alert-engine", "Alert Engine", "security", "http://localhost:9103/metrics"),
             ("telemetry-producer", "Kafka Producer", "streaming", "http://localhost:9104/metrics"),
-            ("telemetry-consumer", "Kafka Consumer", "streaming", "http://localhost:9105/metrics"),
             ("threat-intelligence-engine", "Threat Intelligence Engine", "security", "http://localhost:9106/metrics"),
             ("prometheus", "Prometheus", "observability", "http://localhost:9090"),
         ]
@@ -72,8 +71,7 @@ class MonitoringService:
                 db_status,
                 redis_status,
                 elastic_status,
-                ServiceHealth(name="Grafana", status="healthy", detail="Provisioned locally at http://localhost:3000.", category="observability", endpoint="http://localhost:3000", last_checked=now),
-                ServiceHealth(name="Kafka", status="observing", detail="Kafka is monitored indirectly through pipeline throughput and service consumers.", category="streaming", endpoint="http://localhost:8080", last_checked=now),
+                ServiceHealth(name="Kafka", status="observing", detail="Kafka is monitored indirectly through pipeline throughput and service consumers.", category="streaming", endpoint="localhost:9092", last_checked=now),
                 self._spark_status(prometheus_targets, now),
                 ServiceHealth(name="Frontend", status="healthy", detail="React dashboard is served locally by the frontend container.", category="ui", endpoint="http://localhost:5173", last_checked=now),
             ]

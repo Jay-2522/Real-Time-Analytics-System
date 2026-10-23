@@ -32,8 +32,6 @@ Spark UI endpoints:
 - Spark Worker UI: `http://localhost:8082`
 - Spark Driver / Jobs UI: `http://localhost:4040`
 
-Kafka UI remains available at `http://localhost:8080`.
-
 ## Kafka Inputs
 
 Spark consumes these telemetry topics:
@@ -91,7 +89,7 @@ The Spark pipeline performs:
 - Null handling and invalid event filtering.
 - Source topic, partition, offset, Kafka timestamp, and processing timestamp enrichment.
 
-Malformed or schema-incompatible events are filtered out of analytics outputs. Phase 2 still handles producer and consumer dead-letter flows for unprocessable Kafka messages.
+Malformed or schema-incompatible events are filtered out of analytics outputs. Storage-sink publishes malformed Kafka records to the dead-letter topic while persisting their quarantine records.
 
 ## Windowing And Features
 

@@ -163,6 +163,7 @@ services:
     networks: [monitoring]
   grafana:
     <<: *restricted
+    profiles: [dashboards]
     image: grafana/grafana:12.4.13@sha256:41bbc1b5e04416f81891806076db2a2ff60a5d4da5f78d36a88b033a8c199185
     user: '472:472'
     read_only: true
@@ -307,39 +308,6 @@ services:
     - producer
     volumes:
     - ${HARDENED_SECRETS_DIR:?required}/producer:/run/security:ro
-    networks:
-    - messaging
-    - monitoring
-  telemetry-consumer:
-    profiles:
-    - workers
-    build:
-      context: ../..
-      dockerfile: deploy/hardened/worker.Dockerfile
-      target: runtime
-      args:
-        SERVICE: kafka-producers
-    user: 10001:10001
-    read_only: true
-    tmpfs:
-    - /tmp
-    cap_drop:
-    - ALL
-    security_opt:
-    - no-new-privileges:true
-    restart: unless-stopped
-    environment:
-      ENVIRONMENT: production
-      SERVICE_SECURITY_FILE: /run/security/security.json
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_CONSUMER_GROUP: consumer-hardened
-    command:
-    - python
-    - -m
-    - app.main
-    - consumer
-    volumes:
-    - ${HARDENED_SECRETS_DIR:?required}/consumer:/run/security:ro
     networks:
     - messaging
     - monitoring

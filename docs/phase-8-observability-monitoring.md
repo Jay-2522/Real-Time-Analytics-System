@@ -18,18 +18,18 @@ Python services
 | Service | Container | URL |
 | --- | --- | --- |
 | Prometheus | `streaming-analytics-prometheus` | `http://localhost:9090` |
-| Grafana | `streaming-analytics-grafana` | `http://localhost:3000` |
+| Grafana (optional) | `streaming-analytics-grafana` | `http://localhost:3000` |
 | Backend metrics | `streaming-analytics-backend` | `http://localhost:8000/metrics` |
 | ML metrics | `streaming-analytics-ml-inference` | `http://localhost:9101/metrics` |
 | Storage sink metrics | `streaming-analytics-storage-sink` | `http://localhost:9102/metrics` |
 | Alert engine metrics | `streaming-analytics-alert-engine` | `http://localhost:9103/metrics` |
 | Producer metrics | `streaming-analytics-producer` | `http://localhost:9104/metrics` |
-| Consumer metrics | `streaming-analytics-consumer` | `http://localhost:9105/metrics` |
 
-Grafana default login:
+Start the optional Grafana dashboards with `./scripts/start_full.sh --dashboards`.
+The admin password is the generated `GRAFANA_ADMIN_PASSWORD` in the ignored local `.env` file.
 
 ```text
-admin / admin
+admin / <GRAFANA_ADMIN_PASSWORD>
 ```
 
 ## Prometheus Targets
@@ -41,7 +41,6 @@ Prometheus is configured in `monitoring/prometheus/prometheus.yml` and scrapes:
 - `storage-sink`
 - `alert-engine`
 - `telemetry-producer`
-- `telemetry-consumer`
 - `prometheus`
 
 Open target status at:
@@ -151,7 +150,6 @@ curl http://localhost:9101/metrics
 curl http://localhost:9102/metrics
 curl http://localhost:9103/metrics
 curl http://localhost:9104/metrics
-curl http://localhost:9105/metrics
 ```
 
 Verify monitoring APIs:

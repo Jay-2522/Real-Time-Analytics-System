@@ -74,26 +74,6 @@ services:
     networks:
       - streaming-analytics-network
 
-  kafka-ui:
-    container_name: streaming-analytics-kafka-ui
-    image: provectuslabs/kafka-ui:v0.7.2
-    depends_on:
-      kafka:
-        condition: service_healthy
-    environment:
-      KAFKA_CLUSTERS_0_NAME: local-streaming-analytics
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: streaming-analytics-kafka:29092
-      KAFKA_CLUSTERS_0_ZOOKEEPER: streaming-analytics-zookeeper:2181
-    ports:
-      - "127.0.0.1:8080:8080"
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-    networks:
-      - streaming-analytics-network
-
   postgres:
     container_name: streaming-analytics-postgres
     image: postgres:16-alpine
@@ -248,32 +228,6 @@ services:
     command: python -m app.main producer
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9104/metrics', timeout=3)"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-    depends_on:
-      kafka-init:
-        condition: service_completed_successfully
-    restart: unless-stopped
-    networks:
-      - streaming-analytics-network
-
-  telemetry-consumer:
-    container_name: streaming-analytics-consumer
-    build:
-      context: .
-      dockerfile: kafka-producers/Dockerfile
-    env_file:
-      - ./.env
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: streaming-analytics-kafka:29092
-      KAFKA_CONSUMER_GROUP: streaming-analytics-telemetry-consumers
-      CONSUMER_LOG_LEVEL: INFO
-    ports:
-      - "127.0.0.1:9105:9105"
-    command: python -m app.main consumer
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9105/metrics', timeout=3)"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -561,6 +515,7 @@ services:
       - streaming-analytics-network
 
   grafana:
+    profiles: ["dashboards"]
     container_name: streaming-analytics-grafana
     image: grafana/grafana:11.3.0
     environment:

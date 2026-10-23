@@ -3,14 +3,14 @@ from pipeline_runtime.cache_recovery import CacheReconciler
 from pipeline_runtime.durable import claim, enqueue, OutboxWorker, IdentityConflict
 from pipeline_runtime.identity import logical_key, quarantine
 from app.schemas.records import StorageRecord
-from pipeline_runtime.kafka import CONSUMER_OPTIONS, DeliveryLoop
+from pipeline_runtime.kafka import CONSUMER_OPTIONS, DeliveryLoop, publish_confirmed
 from pipeline_runtime.identity import coordinate
 import json
 import logging
 import signal
 from types import FrameType
 
-from confluent_kafka import Consumer
+from confluent_kafka import Consumer, Producer
 from sqlalchemy.orm import sessionmaker
 
 from app.config.settings import StorageSinkSettings
@@ -40,6 +40,7 @@ class StorageSinkConsumer:
         self._indexer = indexer
         self._cache = cache
         self._consumer: Consumer | None = None
+        self._deadletter_producer: Producer | None = None
         self._running = True
         self._outbox = OutboxWorker(session_factory, "storage", {
             "elasticsearch": lambda key, payload: self._indexer.index(StorageRecord.model_validate(payload), key),
@@ -49,6 +50,7 @@ class StorageSinkConsumer:
     def run(self) -> None:
         self._register_shutdown_handlers()
         self._consumer = retry_with_backoff(self._create_consumer, logger, "Kafka storage sink consumer connection")
+        self._deadletter_producer = retry_with_backoff(self._create_deadletter_producer, logger, "Kafka storage sink dead-letter producer connection")
         logger.info("subscribing_storage_sink topics=%s group=%s", STORAGE_INPUT_TOPICS, self._settings.kafka_consumer_group)
         self._outbox.start()
         try:
@@ -57,6 +59,7 @@ class StorageSinkConsumer:
                 lambda: self._running)
         finally:
             self._outbox.stop()
+            self._deadletter_producer.flush(10)
 
     def _create_consumer(self) -> Consumer:
         consumer = Consumer(
@@ -72,6 +75,30 @@ class StorageSinkConsumer:
         metadata = consumer.list_topics(timeout=10)
         logger.info("kafka_connected brokers=%s", len(metadata.brokers))
         return consumer
+
+    def _create_deadletter_producer(self) -> Producer:
+        producer = Producer(
+            {
+                **kafka_options(),
+                "bootstrap.servers": self._settings.kafka_bootstrap_servers,
+                "client.id": f"{self._settings.consumer_client_id}-deadletter",
+                "acks": "all",
+                "enable.idempotence": True,
+                "delivery.timeout.ms": 10000,
+                "retries": 5,
+            }
+        )
+        producer.list_topics(timeout=10)
+        return producer
+
+    def _publish_deadletter(self, body: dict) -> None:
+        assert self._deadletter_producer is not None
+        publish_confirmed(
+            self._deadletter_producer,
+            topic=self._settings.deadletter_topic,
+            key=body["event_id"],
+            value=json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8"),
+        )
 
     def _persist(self, record, key):
         # Persist the fallback once; retries/reconstruction must not invent a new time.
@@ -98,6 +125,8 @@ class StorageSinkConsumer:
             digest(parsed)
         except (UnicodeError, ValueError, TypeError, KeyError) as exc:
             body = quarantine(topic, payload, exc, position)
+            if topic != TELEMETRY_DEADLETTER_EVENTS:
+                self._publish_deadletter(body)
             record = map_payload_to_record(TELEMETRY_DEADLETTER_EVENTS, body)
             key = logical_key(TELEMETRY_DEADLETTER_EVENTS, body)
         try:
@@ -105,6 +134,8 @@ class StorageSinkConsumer:
         except IdentityConflict as exc:
             logger.error("storage_identity_conflict position=%s error=%s", position, exc)
             body = quarantine(topic, payload, exc, position)
+            if topic != TELEMETRY_DEADLETTER_EVENTS:
+                self._publish_deadletter(body)
             self._persist(map_payload_to_record(TELEMETRY_DEADLETTER_EVENTS, body),
                           logical_key(TELEMETRY_DEADLETTER_EVENTS, body))
         except Exception:

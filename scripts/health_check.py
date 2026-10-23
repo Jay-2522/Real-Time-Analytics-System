@@ -37,12 +37,13 @@ HTTP_CHECKS = [
     ("Frontend", "http://localhost:5173"),
     ("Elasticsearch", "http://localhost:9200/_cluster/health"),
     ("Prometheus", "http://localhost:9090/-/ready"),
-    ("Grafana", f"http://localhost:{local_value('GRAFANA_PUBLISHED_PORT', '3000')}/api/health"),
     ("ML Inference", "http://localhost:9101/metrics"),
     ("Storage Sink", "http://localhost:9102/metrics"),
     ("Alert Engine", "http://localhost:9103/metrics"),
     ("Threat Intelligence Engine", "http://localhost:9106/metrics"),
 ]
+
+GRAFANA_CHECK = ("Grafana", f"http://localhost:{local_value('GRAFANA_PUBLISHED_PORT', '3000')}/api/health")
 
 TCP_CHECKS = [
     ("Kafka", "localhost", 9092),
@@ -73,8 +74,9 @@ def check_tcp(name: str, host: str, port: int, timeout: float) -> CheckResult:
         return CheckResult(name, "failed", target, str(exc))
 
 
-def run(timeout: float) -> list[CheckResult]:
-    results = [check_http(name, url, timeout) for name, url in HTTP_CHECKS]
+def run(timeout: float, include_grafana: bool = False) -> list[CheckResult]:
+    http_checks = [*HTTP_CHECKS, GRAFANA_CHECK] if include_grafana else HTTP_CHECKS
+    results = [check_http(name, url, timeout) for name, url in http_checks]
     results.extend(check_tcp(name, host, port, timeout) for name, host, port in TCP_CHECKS)
     return sorted(results, key=lambda result: result.name)
 
@@ -83,9 +85,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Validate local Streaming Analytics platform health.")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON output.")
     parser.add_argument("--timeout", type=float, default=2.0, help="Per-check timeout in seconds.")
+    parser.add_argument("--include-grafana", action="store_true", help="Check the optional Grafana dashboard service.")
     args = parser.parse_args()
 
-    results = run(args.timeout)
+    results = run(args.timeout, args.include_grafana)
     ok_count = sum(1 for result in results if result.status == "ok")
     summary = {"status": "ok" if ok_count == len(results) else "degraded", "ok": ok_count, "failed": len(results) - ok_count, "checks": [asdict(result) for result in results]}
 

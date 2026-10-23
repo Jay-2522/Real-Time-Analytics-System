@@ -39,6 +39,7 @@ docker logs -f streaming-analytics-storage-sink
 ```
 
 The service expects Kafka and PostgreSQL to be available. Redis and Elasticsearch are optional-safe.
+Malformed Kafka records are persisted and published to `telemetry.deadletter.events`.
 
 ## PostgreSQL Tables
 

@@ -21,10 +21,9 @@ ZooKeeper Kafka cluster to KRaft or copy historical application data.
 | Frontend/proxy | Vite development server | Built static assets; UID 101; HTTPS; CSP/HSTS; read-only root filesystem |
 | Prometheus | Published unauthenticated HTTP | Internal monitoring network; Basic authentication; backend scrape bearer token |
 | Grafana | Published HTTP administration | Internal monitoring network; file-based administrator password; anonymous access/signup disabled |
-| Kafka UI | Published administrative UI | Excluded |
 
 The preserved development deployment publishes loopback ports 2181, 6379, 7077,
-8000, 8080–8082, 9090, 9092, 9101–9106, 9200, 13000, 15432 and 5173.
+8000, 8081–8082, 9090, 9092, 9101–9106, 9200, 13000, 15432 and 5173.
 They are not verified as Internet-accessible. Only `127.0.0.1:8443` is published
 by the separate hardened stack. Its certificate and CSP
 are intentionally configured for `https://localhost:8443`; this is a reproducible
@@ -168,14 +167,12 @@ These are the captured **original image** counts; image tags can change.
 | grafana/grafana:11.3.0 | 9 | 138 |
 | postgres:16-alpine | 1 | 24 |
 | prom/prometheus:v2.55.1 | 4 | 106 |
-| provectuslabs/kafka-ui:v0.7.2 | 5 | 54 |
 | redis:7.4-alpine | 0 | 2 |
 | streaming_analytics_system-alert-engine | 0 | 50 |
 | streaming_analytics_system-backend | 0 | 57 |
 | streaming_analytics_system-frontend | 2 | 79 |
 | streaming_analytics_system-ml-inference | 1 | 114 |
 | streaming_analytics_system-storage-sink | 0 | 50 |
-| streaming_analytics_system-telemetry-consumer | 0 | 50 |
 | streaming_analytics_system-telemetry-producer | 0 | 50 |
 | streaming_analytics_system-threat-intelligence-engine | 0 | 50 |
 
@@ -221,7 +218,6 @@ Migration of the preserved worker is explicitly deferred and remains a blocker.
 | soc-hardened-postgres | 0 | 0 |
 | soc-hardened-redis | 0 | 0 |
 | soc-hardened-telemetry-producer | 0 | 44 |
-| soc-hardened-telemetry-consumer | 0 | 44 |
 | soc-hardened-ml-inference | 0 | 44 |
 | soc-hardened-storage-sink | 0 | 44 |
 | soc-hardened-alert-engine | 0 | 44 |
