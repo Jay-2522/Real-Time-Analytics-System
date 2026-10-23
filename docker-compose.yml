@@ -86,6 +86,11 @@ services:
       KAFKA_CLUSTERS_0_ZOOKEEPER: streaming-analytics-zookeeper:2181
     ports:
       - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
     networks:
       - streaming-analytics-network
 
@@ -187,6 +192,12 @@ services:
     secrets:
       - backend_metrics_token
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
     depends_on:
       schema-bootstrap:
         condition: service_completed_successfully
@@ -208,8 +219,15 @@ services:
       - ${DEV_BIND_ROOT:-.}/frontend:/app
       - frontend_node_modules:/app/node_modules
     command: npm run dev -- --host 0.0.0.0
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:5173"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - streaming-analytics-network
 
@@ -228,6 +246,11 @@ services:
     ports:
       - "127.0.0.1:9104:9104"
     command: python -m app.main producer
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9104/metrics', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -249,6 +272,11 @@ services:
     ports:
       - "127.0.0.1:9105:9105"
     command: python -m app.main consumer
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9105/metrics', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -263,6 +291,11 @@ services:
     ports:
       - "127.0.0.1:7077:7077"
       - "127.0.0.1:8081:8080"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "</dev/tcp/127.0.0.1/8080"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     networks:
       - streaming-analytics-network
 
@@ -272,12 +305,18 @@ services:
     container_name: streaming-analytics-spark-worker
     image: apache/spark:3.5.3
     depends_on:
-      - spark-master
+      spark-master:
+        condition: service_healthy
     volumes:
       - spark_checkpoints:/opt/spark/checkpoints
     command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://streaming-analytics-spark-master:7077", "--cores", "2", "--memory", "2G", "--webui-port", "8081"]
     ports:
       - "127.0.0.1:8082:8081"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "</dev/tcp/127.0.0.1/8081"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     networks:
       - streaming-analytics-network
 
@@ -301,13 +340,19 @@ services:
       - "127.0.0.1:4040:4040"
     volumes:
       - spark_checkpoints:/opt/spark/checkpoints
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4040/api/v1/applications', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
     depends_on:
       kafka-init:
         condition: service_completed_successfully
       spark-master:
-        condition: service_started
+        condition: service_healthy
       spark-worker:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - streaming-analytics-network
@@ -335,11 +380,16 @@ services:
     command: python -m app.main inference
     volumes:
       - ${DEV_BIND_ROOT:-.}/ml-models/artifacts:/app/artifacts
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9101/metrics', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     depends_on:
       kafka-init:
         condition: service_completed_successfully
       spark-streaming:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - streaming-analytics-network
@@ -365,6 +415,11 @@ services:
       ELASTICSEARCH_HOST: http://streaming-analytics-elasticsearch:9200
     ports:
       - "127.0.0.1:9102:9102"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9102/metrics', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -375,7 +430,7 @@ services:
       redis:
         condition: service_healthy
       elasticsearch:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - streaming-analytics-network
@@ -403,6 +458,11 @@ services:
       INCIDENT_CORRELATION_WINDOW_SECONDS: 900
     ports:
       - "127.0.0.1:9103:9103"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9103/metrics', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -413,9 +473,9 @@ services:
       redis:
         condition: service_healthy
       elasticsearch:
-        condition: service_started
+        condition: service_healthy
       ml-inference:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - streaming-analytics-network
@@ -443,6 +503,11 @@ services:
       THREAT_INTEL_METRICS_PORT: 9106
     ports:
       - "127.0.0.1:9106:9106"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9106/metrics', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -453,11 +518,11 @@ services:
       redis:
         condition: service_healthy
       elasticsearch:
-        condition: service_started
+        condition: service_healthy
       ml-inference:
-        condition: service_started
+        condition: service_healthy
       alert-engine:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - streaming-analytics-network
@@ -476,12 +541,22 @@ services:
     volumes:
       - ${DEV_BIND_ROOT:-.}/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:9090/-/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     depends_on:
-      - backend
-      - ml-inference
-      - storage-sink
-      - alert-engine
-      - threat-intelligence-engine
+      backend:
+        condition: service_healthy
+      ml-inference:
+        condition: service_healthy
+      storage-sink:
+        condition: service_healthy
+      alert-engine:
+        condition: service_healthy
+      threat-intelligence-engine:
+        condition: service_healthy
     networks:
       - streaming-analytics-network
 
@@ -498,8 +573,14 @@ services:
       - grafana_data:/var/lib/grafana
       - ${DEV_BIND_ROOT:-.}/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ${DEV_BIND_ROOT:-.}/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_healthy
     networks:
       - streaming-analytics-network
 
