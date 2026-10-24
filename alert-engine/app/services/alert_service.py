@@ -11,7 +11,7 @@ from app.elastic.indexer import AlertIndexer
 from app.incidents.correlator import IncidentCorrelator
 from app.repositories.alert_repository import AlertRepository
 from app.rules.rule_engine import AlertRulesEngine
-from app.utils.metrics import ALERTS_GENERATED_TOTAL, CRITICAL_ALERTS_TOTAL
+from app.utils.metrics import ALERTS_GENERATED_TOTAL, ALERT_DEDUPLICATIONS_TOTAL, CRITICAL_ALERTS_TOTAL
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +24,14 @@ class AlertProcessingService:
         correlator: IncidentCorrelator,
         repository: AlertRepository,
         indexer: AlertIndexer,
+        dedup_cooldown_seconds: int,
     ) -> None:
         self._rules = rules
         self._deduplicator = deduplicator
         self._correlator = correlator
         self._repository = repository
         self._indexer = indexer
+        self._dedup_cooldown_seconds = dedup_cooldown_seconds
 
     def process(self, session: Session, source_topic: str, payload: dict) -> int:
         input_key = logical_key(source_topic, payload)
@@ -40,7 +42,10 @@ class AlertProcessingService:
             alert.alert_id = str(stable_uuid("alert-rules-v1", input_key, alert.correlation_id, alert.severity))
             # Serialize distinct inputs sharing a correlation key, including the no-incident-yet case.
             session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {"key": alert.correlation_id})
-            self._repository.update_dedup_cache(session, alert)
+            if not self._repository.should_emit(session, alert, self._dedup_cooldown_seconds):
+                ALERT_DEDUPLICATIONS_TOTAL.inc()
+                logger.info("alert_deduplicated key=%s", alert.correlation_id)
+                continue
             self._repository.persist_alert(session, alert)
             incident_id = self._correlator.correlate(session, alert)
             alert.incident_id = incident_id

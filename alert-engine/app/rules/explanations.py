@@ -1,23 +1,23 @@
 def explain_alert(rule_name: str, event_type: str, severity: str) -> tuple[str, str]:
-    if rule_name == "credential_attack":
+    if rule_name == "api_server_error":
         return (
-            "Multiple failed logins combined with elevated anomaly scores indicate possible credential stuffing behavior.",
-            "Investigate authentication logs, enforce step-up authentication, and consider temporarily rate-limiting the entity.",
+            "The API event reports a server-side HTTP error response.",
+            "Review the endpoint logs and trace the failed request before deciding whether it is malicious.",
         )
-    if rule_name == "api_abuse":
+    if rule_name == "large_network_transfer":
         return (
-            "High API request volume with elevated risk score suggests automated abuse or bot activity.",
-            "Review API tokens, inspect user-agent/source-IP patterns, and apply throttling if abuse is confirmed.",
-        )
-    if rule_name == "network_spike":
-        return (
-            "Network byte volume and risk signals suggest a potential data transfer spike or scanning behavior.",
-            "Validate destination systems, inspect network flow records, and isolate the source if exfiltration is suspected.",
+            "This single network event transferred at least eight million bytes.",
+            "Validate the destination and expected transfer size before escalating.",
         )
     if rule_name == "high_anomaly":
         return (
             f"The ML detector classified this {event_type} signal as {severity} based on abnormal feature patterns.",
             "Review the related entity timeline and compare recent behavior against normal operating baselines.",
+        )
+    if rule_name == "model_positive":
+        return (
+            "The model returned an explicit positive anomaly decision even though its numeric scores were below the alert thresholds.",
+            "Review the prediction features and related entity timeline to validate the model decision.",
         )
     return (
         "Correlated telemetry and risk signals indicate activity outside the expected baseline.",

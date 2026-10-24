@@ -17,22 +17,23 @@ class AlertRulesEngine:
         timestamp = _timestamp(payload.get("timestamp") or payload.get("event_timestamp") or payload.get("calculated_at"))
 
         candidates: list[tuple[str, str, str, list[str]]] = []
-        if anomaly_score >= 0.88 or ml_risk_score >= 90:
-            candidates.append(("high_anomaly", "critical", "Critical anomaly detected", ["ml", "critical", event_type]))
-        elif anomaly_score >= 0.72 or ml_risk_score >= 75:
-            candidates.append(("high_anomaly", "high", "High-risk anomaly detected", ["ml", "high", event_type]))
-        elif anomaly_score >= 0.55 or ml_risk_score >= 60:
-            candidates.append(("high_anomaly", "medium", "Elevated anomaly signal", ["ml", "medium", event_type]))
-        elif payload.get("is_anomaly") is True:
-            candidates.append(("model_anomaly", "medium", "ML anomaly detected", ["ml", "medium", event_type]))
+        if source_topic == "ml.anomaly.predictions":
+            if anomaly_score >= 0.88 or ml_risk_score >= 90:
+                candidates.append(("high_anomaly", "critical", "Critical anomaly detected", ["ml", "critical", event_type]))
+            elif anomaly_score >= 0.72 or ml_risk_score >= 75:
+                candidates.append(("high_anomaly", "high", "High-risk anomaly detected", ["ml", "high", event_type]))
+            elif anomaly_score >= 0.55 or ml_risk_score >= 60:
+                candidates.append(("high_anomaly", "medium", "Elevated anomaly signal", ["ml", "medium", event_type]))
+            elif payload.get("is_anomaly") is True:
+                candidates.append(("model_positive", "medium", "Positive ML anomaly decision", ["ml", "medium", event_type]))
 
-        if event_type == "login" and (payload.get("login_success") is False or _float(payload.get("failed_login_rate")) >= 0.5):
-            candidates.append(("credential_attack", "high", "Possible credential attack", ["identity", "login", "credential-stuffing"]))
-        if event_type == "api" and (_float(payload.get("endpoint_error_rate")) >= 0.4 or _float(payload.get("requests_per_minute")) >= 80 or int(payload.get("status_code") or 200) >= 500):
-            candidates.append(("api_abuse", "medium", "Possible API abuse pattern", ["api", "abuse"]))
-        if event_type == "network" and (_float(payload.get("network_bytes_spike_score")) >= 6 or _float(payload.get("avg_network_bytes")) >= 150000):
-            candidates.append(("network_spike", "medium", "Network spike anomaly", ["network", "traffic-spike"]))
-        if _float(payload.get("suspicious_ip_frequency")) >= 10 or _float(payload.get("high_risk_event_count")) >= 5:
+        if source_topic == "analytics.enriched.events" and event_type == "api" and int(payload.get("status_code") or 200) >= 500:
+            candidates.append(("api_server_error", "medium", "API server error response", ["api", "server-error"]))
+        if source_topic == "analytics.enriched.events" and event_type == "network" and (
+            _float(payload.get("bytes_sent")) + _float(payload.get("bytes_received")) >= 8_000_000
+        ):
+            candidates.append(("large_network_transfer", "medium", "Large network transfer", ["network", "large-transfer"]))
+        if source_topic == "analytics.risk.metrics" and _float(payload.get("high_risk_event_count")) >= 5:
             candidates.append(("correlated_risk", "high", "Repeated high-risk activity", ["correlation", "repeat-activity"]))
 
         alerts = []

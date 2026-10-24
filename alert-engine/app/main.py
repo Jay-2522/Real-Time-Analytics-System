@@ -34,6 +34,7 @@ def main() -> None:
         correlator=IncidentCorrelator(settings),
         repository=AlertRepository(),
         indexer=indexer,
+        dedup_cooldown_seconds=settings.dedup_cooldown_seconds,
     )
     AlertEngineConsumer(settings, session_factory, service).run()
 

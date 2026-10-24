@@ -1,12 +1,15 @@
 id: suspicious_privilege_escalation
 name: Suspicious Privilege Escalation
-description: Detects suspicious administrative or privilege elevation behavior.
-enabled: true
+description: Disabled because events do not contain before-and-after privilege or role data.
+enabled: false
+disabled_reason: Events lack actor, target, previous privilege, and resulting privilege fields.
 severity: critical
 tactic: Privilege Escalation
 technique: Valid Accounts
 mitre_id: T1078
 conditions:
-  keywords: [privilege, escalation, admin, sudo, root]
+  field_equals:
+    event_type: [anomaly]
+    anomaly_type: [privilege_escalation]
   min_risk_score: 70
 score: 92

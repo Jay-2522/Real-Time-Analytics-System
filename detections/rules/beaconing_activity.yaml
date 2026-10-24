@@ -1,12 +1,14 @@
-id: beaconing_activity
-name: Possible Beaconing Activity
-description: Detects periodic network or DNS-like behavior that may indicate C2.
+id: high_risk_dns_activity
+name: High-Risk DNS Activity
+description: Detects a high-risk network event using the DNS service port; it does not claim to prove periodic beaconing.
 enabled: true
 severity: high
 tactic: Command and Control
 technique: Application Layer Protocol
 mitre_id: T1071
 conditions:
-  keywords: [beacon, periodic, dns, c2, command control]
+  field_equals:
+    event_type: [network]
+    port: [53]
   min_risk_score: 58
 score: 78

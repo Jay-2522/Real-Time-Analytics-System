@@ -1,6 +1,6 @@
 # Alert Engine
 
-The alert engine is the Phase 7 real-time SOC intelligence service. It consumes ML predictions and analytics streams from Kafka, applies local alert rules, deduplicates repeated signals with Redis, correlates alerts into incidents, persists everything to PostgreSQL, and indexes searchable alert/incident documents in Elasticsearch.
+The alert engine is the Phase 7 real-time SOC intelligence service. It consumes ML predictions and analytics streams from Kafka, applies local alert rules, deduplicates repeated signals with PostgreSQL, correlates alerts into incidents, persists everything to PostgreSQL, and indexes searchable alert/incident documents in Elasticsearch.
 
 All dependencies are local and free.
 
@@ -21,7 +21,7 @@ docker logs -f streaming-analytics-alert-engine
 
 - Rule-based alert generation.
 - Severity escalation.
-- Redis cooldown deduplication.
+- PostgreSQL cooldown deduplication keyed by rule and entity.
 - Incident correlation by entity and severity.
 - Incident timeline tracking.
 - Rule-based AI explanations and recommended actions.
