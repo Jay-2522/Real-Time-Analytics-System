@@ -5,3 +5,5 @@ THREAT_INPUT_TOPICS = (
     "telemetry.login.events",
     "telemetry.network.events",
 )
+
+THREAT_DETECTION_EVENTS = "threat.detection.events"

@@ -2,11 +2,11 @@
 set -euo pipefail
 config=/run/security/client.properties
 broker=kafka:9092
-for topic in telemetry.login.events telemetry.api.events telemetry.network.events telemetry.anomaly.events telemetry.deadletter.events analytics.enriched.events analytics.window.metrics analytics.risk.metrics analytics.feature.engineering ml.anomaly.predictions; do
+for topic in telemetry.login.events telemetry.api.events telemetry.network.events telemetry.anomaly.events telemetry.deadletter.events analytics.enriched.events analytics.window.metrics analytics.risk.metrics analytics.feature.engineering ml.anomaly.predictions threat.detection.events; do
   kafka-topics --bootstrap-server "$broker" --command-config "$config" --create --if-not-exists --topic "$topic" --partitions 1 --replication-factor 1
 done
 allow() { kafka-acls --bootstrap-server "$broker" --command-config "$config" --add --allow-principal "User:CN=$1" --operation "$2" --resource-pattern-type prefixed --topic "$3"; }
-for identity in producer consumer spark ml; do
+for identity in producer consumer spark ml threat; do
   kafka-acls --bootstrap-server "$broker" --command-config "$config" --add --allow-principal "User:CN=$identity" --operation IdempotentWrite --cluster
 done
 allow producer Write telemetry.
@@ -20,8 +20,10 @@ allow ml Write telemetry.deadletter.events
 for prefix in telemetry. analytics. ml.; do allow storage Read "$prefix"; done
 allow alerts Read ml.anomaly.predictions
 allow alerts Read analytics.
+allow alerts Read threat.detection.events
 allow threat Read telemetry.
 allow threat Read ml.anomaly.predictions
+allow threat Write threat.detection.events
 # The threat consumer also subscribes to these two analytics products, not all analytics.
 for topic in analytics.enriched.events analytics.risk.metrics; do
   kafka-acls --bootstrap-server "$broker" --command-config "$config" --add --allow-principal User:CN=threat --operation Read --resource-pattern-type literal --topic "$topic"

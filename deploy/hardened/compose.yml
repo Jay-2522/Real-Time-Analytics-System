@@ -301,6 +301,7 @@ services:
       ENVIRONMENT: production
       SERVICE_SECURITY_FILE: /run/security/security.json
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SYNTHETIC_PRODUCER_ENABLED: ${SYNTHETIC_PRODUCER_ENABLED:-true}
     command:
     - python
     - -m

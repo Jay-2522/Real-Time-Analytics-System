@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class KafkaRuntimeSettings(BaseSettings):
     kafka_bootstrap_servers: str = Field(default="localhost:9092")
+    synthetic_producer_enabled: bool = Field(default=True, validation_alias="SYNTHETIC_PRODUCER_ENABLED")
     event_rate_per_second: float = Field(default=5.0, ge=0.1, le=500.0)
     anomaly_rate: float = Field(default=0.05, ge=0.0, le=1.0)
     producer_log_level: str = Field(default="INFO")

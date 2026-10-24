@@ -26,6 +26,11 @@ class TelemetryProducer:
 
     def run(self) -> None:
         self._register_shutdown_handlers()
+        if not self._settings.synthetic_producer_enabled:
+            logger.info("synthetic_telemetry_producer_disabled")
+            while self._running:
+                time.sleep(1)
+            return
         self._producer = retry_with_backoff(self._create_producer, logger, "Kafka producer connection")
 
         interval_seconds = 1.0 / self._settings.event_rate_per_second

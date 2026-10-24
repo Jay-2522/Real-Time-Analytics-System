@@ -36,6 +36,20 @@ class AlertRulesEngine:
         if source_topic == "analytics.risk.metrics" and _float(payload.get("high_risk_event_count")) >= 5:
             candidates.append(("correlated_risk", "high", "Repeated high-risk activity", ["correlation", "repeat-activity"]))
 
+        if source_topic == "threat.detection.events":
+            for hit in payload.get("rule_hits") or []:
+                rule_id = str(hit.get("rule_id") or "").strip()
+                if not rule_id:
+                    continue
+                candidates.append(
+                    (
+                        rule_id,
+                        str(hit.get("severity") or "medium"),
+                        str(hit.get("rule_name") or rule_id),
+                        ["threat-detection", rule_id, str(hit.get("mitre_id") or "unmapped")],
+                    )
+                )
+
         alerts = []
         for rule_name, severity, title, tags in candidates:
             explanation, action = explain_alert(rule_name, event_type, severity)
