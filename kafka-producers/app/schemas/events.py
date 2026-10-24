@@ -21,11 +21,11 @@ class BaseTelemetryEvent(BaseModel):
 
 
 class LoginEvent(BaseTelemetryEvent):
-    user_id: str
+    user_id: str | None = None
     username: str
     source_ip: str
-    country: str
-    device_type: str
+    country: str | None = None
+    device_type: str | None = None
     login_success: bool
     failure_reason: str | None = None
     event_type: Literal["login"] = "login"
@@ -46,10 +46,10 @@ class NetworkEvent(BaseTelemetryEvent):
     source_ip: str
     destination_ip: str
     protocol: Literal["TCP", "UDP", "ICMP"]
-    bytes_sent: int = Field(ge=0)
-    bytes_received: int = Field(ge=0)
+    bytes_sent: int | None = Field(default=None, ge=0)
+    bytes_received: int | None = Field(default=None, ge=0)
     port: int = Field(ge=1, le=65535)
-    packet_count: int = Field(ge=1)
+    packet_count: int | None = Field(default=None, ge=1)
     event_type: Literal["network"] = "network"
 
 
