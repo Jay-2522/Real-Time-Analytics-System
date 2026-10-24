@@ -3,6 +3,7 @@ from pyspark.sql.types import BooleanType, DoubleType, IntegerType, StringType, 
 COMMON_FIELDS = [
     StructField("event_id", StringType(), nullable=False),
     StructField("timestamp", StringType(), nullable=False),
+    StructField("original_timestamp", StringType(), nullable=True),
     StructField("risk_score", DoubleType(), nullable=False),
     StructField("event_type", StringType(), nullable=False),
 ]

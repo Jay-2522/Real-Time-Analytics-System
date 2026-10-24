@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class BaseTelemetryEvent(BaseModel):
     event_id: UUID = Field(default_factory=uuid4)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    original_timestamp: datetime | None = None
     risk_score: float = Field(ge=0.0, le=100.0)
     event_type: str
 

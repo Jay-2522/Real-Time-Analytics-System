@@ -14,6 +14,26 @@ Python runtime for Phase 2 synthetic telemetry production.
 python -m app.main producer
 ```
 
+Follow only new lines appended to a live Cowrie JSON log:
+
+```bash
+python -m app.main cowrie-live --file /path/to/cowrie.json
+```
+
+Replay a saved log once:
+
+```bash
+python -m app.main cowrie-replay --file /path/to/cowrie.json --time-shift
+```
+
+Use `--time-shift` for historical logs when Spark is already running or has
+seen newer events. Spark's event-time watermark treats records sufficiently
+older than the newest observed timestamp as late and can drop them from windowed
+results. Time-shifting moves the earliest supported Cowrie event to the current
+time and keeps every original gap, so a ten-second burst remains a ten-second
+burst. The actual Cowrie time remains in `original_timestamp`. Omit the option
+for live ingestion or when historical event times must drive the windows.
+
 ## Environment Variables
 
 | Variable | Default | Purpose |
