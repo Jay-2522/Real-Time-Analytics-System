@@ -127,7 +127,7 @@ def train_isolation_forest(train_benign: pd.DataFrame, validation: pd.DataFrame)
 
 
 class SupervisedRandomForest:
-    name = "Random Forest (supervised reference)"
+    name = "Random Forest (supervised reference upper bound)"
 
     def __init__(self, model: RandomForestClassifier) -> None:
         self.model = model
