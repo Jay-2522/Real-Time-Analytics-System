@@ -41,6 +41,7 @@ def select_enriched_columns(df: DataFrame) -> DataFrame:
     expected_columns = {
         "event_id": None,
         "event_timestamp": None,
+        "original_timestamp": None,
         "event_type": None,
         "risk_score": None,
         "risk_score_normalized": None,

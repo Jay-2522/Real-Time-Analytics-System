@@ -1,5 +1,5 @@
 from infrastructure_runtime.security import kafka_options
-from pipeline_runtime.kafka import CONSUMER_OPTIONS, DeliveryLoop
+from pipeline_runtime.kafka import CONSUMER_OPTIONS, DeliveryLoop, publish_confirmed
 from pipeline_runtime.identity import coordinate, logical_key, stable_uuid, quarantine
 from pipeline_runtime.durable import claim, enqueue, quarantine_record, OutboxWorker, IdentityConflict
 from sqlalchemy import text
@@ -12,11 +12,11 @@ from types import FrameType
 from typing import Any
 from uuid import uuid4
 
-from confluent_kafka import Consumer
+from confluent_kafka import Consumer, Producer
 from sqlalchemy.orm import sessionmaker
 
 from app.config.settings import ThreatIntelSettings
-from app.config.topics import THREAT_INPUT_TOPICS
+from app.config.topics import THREAT_DETECTION_EVENTS, THREAT_INPUT_TOPICS
 from app.detections.rule_engine import DetectionRuleEngine
 from app.elastic.indexer import ThreatIndexer
 from app.enrichment.ioc_enricher import IOCEnricher
@@ -48,13 +48,17 @@ class ThreatIntelConsumer:
         self._repository = repository
         self._indexer = indexer
         self._consumer: Consumer | None = None
+        self._producer: Producer | None = None
         self._running = True
         self._outbox = OutboxWorker(session_factory, "threat", {
-            "elasticsearch": lambda key, payload: self._indexer.index(ThreatEnrichment.model_validate(payload))})
+            "elasticsearch": lambda key, payload: self._indexer.index(ThreatEnrichment.model_validate(payload)),
+            "kafka": self._publish_detection,
+        })
 
     def run(self) -> None:
         self._register_shutdown_handlers()
         self._consumer = retry_with_backoff(self._create_consumer, logger, "Kafka threat-intelligence consumer connection")
+        self._producer = retry_with_backoff(self._create_producer, logger, "Kafka threat-intelligence producer connection")
         logger.info("subscribing_threat_intelligence topics=%s group=%s", THREAT_INPUT_TOPICS, self._settings.consumer_group)
         self._outbox.start()
         try:
@@ -63,6 +67,7 @@ class ThreatIntelConsumer:
                 lambda: self._running)
         finally:
             self._outbox.stop()
+            self._producer.flush(10)
 
     def _create_consumer(self) -> Consumer:
         consumer = Consumer(
@@ -78,6 +83,30 @@ class ThreatIntelConsumer:
         metadata = consumer.list_topics(timeout=10)
         logger.info("threat_intel_kafka_connected brokers=%s", len(metadata.brokers))
         return consumer
+
+    def _create_producer(self) -> Producer:
+        producer = Producer(
+            {
+                **kafka_options(),
+                "bootstrap.servers": self._settings.kafka_bootstrap_servers,
+                "client.id": "streaming-analytics-threat-detections",
+                "acks": "all",
+                "enable.idempotence": True,
+                "delivery.timeout.ms": 10000,
+                "retries": 5,
+            }
+        )
+        producer.list_topics(timeout=10)
+        return producer
+
+    def _publish_detection(self, key: str, payload: dict[str, Any]) -> None:
+        assert self._producer is not None
+        publish_confirmed(
+            self._producer,
+            topic=THREAT_DETECTION_EVENTS,
+            key=key,
+            value=json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8"),
+        )
 
     def _handle_message(self, topic: str, payload: bytes | None, position=None) -> None:
         try:
@@ -100,7 +129,10 @@ class ThreatIntelConsumer:
                 session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:entity, 0))"),
                                 {"entity": "threat:" + str(enrichment.entity_id)})
                 self._repository.persist(session, enrichment)
-                enqueue(session, "threat", key, "elasticsearch", enrichment.model_dump(mode="json"))
+                body = enrichment.model_dump(mode="json")
+                enqueue(session, "threat", key, "elasticsearch", body)
+                if enrichment.rule_hits:
+                    enqueue(session, "threat", key, "kafka", body)
             THREAT_EVENTS_PROCESSED_TOTAL.labels(topic).inc()
             THREAT_ENRICHMENT_LATENCY_SECONDS.observe(time.perf_counter() - start)
         except IdentityConflict as exc:
@@ -155,7 +187,7 @@ class ThreatIntelConsumer:
 
     @staticmethod
     def _entity_id(payload: dict[str, Any]) -> str:
-        return str(payload.get("entity_id") or payload.get("user_id") or payload.get("username") or payload.get("source_ip") or payload.get("destination_ip") or "unknown")
+        return str(payload.get("entity_id") or payload.get("source_ip") or payload.get("user_id") or payload.get("username") or payload.get("destination_ip") or "unknown")
 
     @staticmethod
     def _entity_type(entity_id: str) -> str:

@@ -4,14 +4,18 @@ cd "$(dirname "$0")/.."
 python3 scripts/setup_local.py
 
 include_dashboards=false
-if [[ "${1:-}" == "--dashboards" ]]; then
-  include_dashboards=true
+build_images=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dashboards) include_dashboards=true ;;
+    --build) build_images=true ;;
+    *)
+      echo "Usage: $0 [--dashboards] [--build]" >&2
+      exit 2
+      ;;
+  esac
   shift
-fi
-if [[ $# -ne 0 ]]; then
-  echo "Usage: $0 [--dashboards]" >&2
-  exit 2
-fi
+done
 
 if docker compose version >/dev/null 2>&1; then
   COMPOSE=(docker compose)
@@ -28,10 +32,14 @@ fi
 
 echo "Starting full Streaming Analytics AI SOC platform..."
 echo "Using Compose command: ${COMPOSE[*]}"
+build_args=()
+if [[ "$build_images" == true ]]; then
+  build_args+=(--build)
+fi
 if [[ "$include_dashboards" == true ]]; then
-  "${COMPOSE[@]}" --profile dashboards up -d --wait --wait-timeout 300
+  "${COMPOSE[@]}" --profile dashboards up -d "${build_args[@]}" --wait --wait-timeout 300
   python3 scripts/health_check.py --include-grafana
 else
-  "${COMPOSE[@]}" up -d --wait --wait-timeout 300
+  "${COMPOSE[@]}" up -d "${build_args[@]}" --wait --wait-timeout 300
   python3 scripts/health_check.py
 fi
